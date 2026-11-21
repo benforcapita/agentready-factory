@@ -87,3 +87,26 @@ class ValidateTests(unittest.TestCase):
     def test_rejects_missing_site(self):
         del self.request["site"]
         self.assert_rejected("site: Field required")
+
+    def test_accepts_fake_ip_resolver_answer(self):
+        self.resolve.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 0)),
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:198.19.255.254", 0, 0, 0)),
+        ]
+        code, stdout, stderr = self.run_validate(SAMPLE)
+        self.assertEqual(code, 0, stderr)
+        self.assertIn("Request is valid", stdout)
+        self.assertIn("fake-IP addresses (198.18.0.0/15); public address check skipped", stderr)
+
+        self.resolve.return_value.append(
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0)),
+        )
+        code, _, stderr = self.run_validate(SAMPLE)
+        self.assertNotEqual(code, 0)
+        self.assertIn("site: host must resolve only to public addresses", stderr)
+
+        for host in ["198.18.0.1", "127.0.0.1", "localhost"]:
+            with self.subTest(host=host):
+                self.resolve.reset_mock()
+                self.request["site"] = f"https://{host}"
+                self.assert_rejected("site: host must be public")

@@ -1,6 +1,6 @@
 """Load and validate a request without fetching its site."""
 
-from ipaddress import IPv6Address, ip_address
+from ipaddress import IPv4Network, IPv6Address, ip_address
 from pathlib import Path
 import re
 import socket
@@ -31,6 +31,10 @@ class RequestLoader(yaml.SafeLoader):
         return mapping
 
 
+# Proxied runtimes (Clash, sing-box, Surge) answer every lookup from RFC 2544
+# space, so these answers carry no information about the real host.
+FAKE_IP_NETWORK = IPv4Network("198.18.0.0/15")
+
 HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.IGNORECASE)
 
 
@@ -43,7 +47,13 @@ def is_public(address):
     return address.is_global and not address.is_multicast
 
 
-def validate_site(site: str) -> None:
+def is_fake_ip(address):
+    if isinstance(address, IPv6Address):
+        address = address.ipv4_mapped
+    return address is not None and address in FAKE_IP_NETWORK
+
+
+def validate_site(site: str) -> list[str]:
     invalid_url = "site: must be an HTTPS URL with a valid host and no credentials"
     if "\\" in site or any(char.isspace() or ord(char) < 32 for char in site):
         raise InvalidRequest(invalid_url)
@@ -71,7 +81,7 @@ def validate_site(site: str) -> None:
     if address is not None:
         if not is_public(address):
             raise InvalidRequest(public_host_required)
-        return
+        return []
 
     try:
         host = host.encode("idna").decode("ascii").lower()
@@ -85,8 +95,18 @@ def validate_site(site: str) -> None:
         records = socket.getaddrinfo(f"{host}.", None, type=socket.SOCK_STREAM)
     except OSError:
         raise InvalidRequest("site: could not resolve host") from None
-    if not records or any(not is_public(ip_address(record[4][0])) for record in records):
+    addresses = [ip_address(record[4][0]) for record in records]
+    resolved = [address for address in addresses if not is_fake_ip(address)]
+    if any(not is_public(address) for address in resolved):
         raise InvalidRequest("site: host must resolve only to public addresses")
+    if not resolved:
+        if not addresses:
+            raise InvalidRequest("site: could not resolve host")
+        return [
+            f"site: resolver returned only fake-IP addresses ({FAKE_IP_NETWORK}); "
+            "public address check skipped"
+        ]
+    return []
 
 
 def validate_policy(request: Request, phase: Phase, directory: Path) -> None:
@@ -110,7 +130,7 @@ def validate_policy(request: Request, phase: Phase, directory: Path) -> None:
         raise InvalidRequest("\n".join(errors))
 
 
-def validate_request(path: Path, phase: Phase = "shadow") -> Request:
+def validate_request(path: Path, phase: Phase = "shadow") -> tuple[Request, list[str]]:
     try:
         data = yaml.load(path.read_text(encoding="utf-8"), Loader=RequestLoader)
     except (OSError, UnicodeError) as error:
@@ -132,5 +152,5 @@ def validate_request(path: Path, phase: Phase = "shadow") -> Request:
         raise InvalidRequest("\n".join(messages)) from None
 
     validate_policy(request, phase, path.parent)
-    validate_site(request.site)
-    return request
+    warnings = validate_site(request.site)
+    return request, warnings

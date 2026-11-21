@@ -40,10 +40,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        validate_request(args.request, phase=args.phase)
+        _, warnings = validate_request(args.request, phase=args.phase)
     except InvalidRequest as error:
         print(error, file=sys.stderr)
         return 1
 
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     print("Request is valid")
     return 0
