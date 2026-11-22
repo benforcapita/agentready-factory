@@ -6,12 +6,12 @@ import tempfile
 import unittest
 
 from arf.lint import inspect_artifact, lint
-from arf.lint.markers import DRAFT_MARKER_EN
+from arf.lint.markers import DRAFT_MARKER
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
 GOLDEN = ROOT / "fixtures/golden/lehamim"
-GOOD = DRAFT_MARKER_EN + "\n## 2. Findings\n| 1 | HTTP 403 and is-agentic blocked | impact |\n## 4. Offer\n1. Review\n## 5. Next\nTalk\n## Appendix\n| Source | Result |\n|---|---|\n| HTTP | OK |\n"
+GOOD = DRAFT_MARKER + "\n## 2. Findings\n| 1 | HTTP 403 and is-agentic blocked | impact |\n## 4. Offer\n1. Review\n## 5. Next\nTalk\n## Appendix\n| Source | Result |\n|---|---|\n| HTTP | OK |\n"
 
 
 class LintTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class LintTests(unittest.TestCase):
             "tracking-pixel": GOOD + '<img style="width:0px;height:1px" src="local.gif">',
             "tracking-param": GOOD + "https://example.com/?gclid=abc",
             "missing-appendix": GOOD.replace("## Appendix", "## Sources"),
-            "missing-draft-marker": GOOD.replace(DRAFT_MARKER_EN, ""),
+            "missing-draft-marker": GOOD.replace(DRAFT_MARKER, ""),
             "secret": GOOD + "\npassword = obviously_fake_value_123456789",
             "blocked-single-source": GOOD.replace(" and is-agentic", ""),
             "extra-offer-steps": GOOD.replace("1. Review", "1. A\n2. B\n3. C\n4. D\n5. E"),
@@ -97,7 +97,7 @@ class LintTests(unittest.TestCase):
     def test_artifact_scope_and_variants(self):
         self.assertEqual(inspect_artifact("report.md", GOOD, "shadow"), [])
         for phase in ("reviewed", "volume"):
-            self.assertEqual(inspect_artifact("report.md", GOOD.replace(DRAFT_MARKER_EN, ""), phase), [])
+            self.assertEqual(inspect_artifact("report.md", GOOD.replace(DRAFT_MARKER, ""), phase), [])
         self.assertEqual(inspect_artifact("notes-for-ben.md", "`example`\nמחיר 50", "shadow"), [])
         for text in ('<script src="https://www.googletagmanager.com/a.js"></script>',
                      '![x](https://api.segment.io/x.png)', '![x](local.png){width=1 height=0}'):
@@ -109,6 +109,18 @@ class LintTests(unittest.TestCase):
             self.assertIn("code-block", {f["rule"] for f in inspect_artifact("report.md", GOOD + code, "shadow")})
         self.assertIn("missing-appendix", {f["rule"] for f in inspect_artifact("report.md", "", "shadow")})
         self.assertNotIn("price-in-offer", {f["rule"] for f in inspect_artifact("report.md", GOOD.replace("## 2. Findings", "## 2. Findings\nprice 200 ₪"), "shadow")})
+
+    def test_old_provisional_markers_are_rejected(self):
+        for file in ("report.md", "report.html"):
+            for marker in ("טיוטה — לא לשליחה", "DRAFT — NOT FOR SENDING"):
+                with self.subTest(file=file, marker=marker):
+                    content = GOOD.replace(DRAFT_MARKER, marker)
+                    self.assertIn("missing-draft-marker", {
+                        f["rule"] for f in inspect_artifact(file, content, "shadow")
+                    })
+            self.assertNotIn("missing-draft-marker", {
+                f["rule"] for f in inspect_artifact(file, GOOD, "shadow")
+            })
 
     def test_credentials_and_tracking_variants(self):
         for credential in ("AKIAEXAMPLE0000000000", "sk-obviously_fake_123456789",

@@ -9,7 +9,7 @@ import re
 import unicodedata
 from urllib.parse import parse_qsl, urlsplit
 
-from .markers import DRAFT_MARKERS
+from .markers import DRAFT_MARKER
 
 SOURCE_ALIASES = {
     "direct": r"HTTP\s+\d{3}|probes\.csv|בקשות ישירות|direct request",
@@ -143,7 +143,7 @@ def inspect_artifact(file, content, phase):
         if len(steps) > 4:
             add("extra-offer-steps", *steps[4])
     if file in {"report.md", "report.html"}:
-        if phase == "shadow" and not any(marker in content for marker in DRAFT_MARKERS):
+        if phase == "shadow" and DRAFT_MARKER not in content:
             add("missing-draft-marker", 1, file)
         parser = MediaParser()
         parser.feed(content)

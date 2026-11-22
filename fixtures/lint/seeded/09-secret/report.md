@@ -1,4 +1,4 @@
-DRAFT — NOT FOR SENDING
+טיוטה — לא לשליחה · DRAFT
 
 # דוח מוכנות לסוכני AI (AgentReady) — מאפיית לחמים
 

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from arf.lint import lint, serialize
-from arf.lint.markers import DRAFT_MARKER_EN
+from arf.lint.markers import DRAFT_MARKER
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "fixtures/lint"
@@ -13,7 +13,7 @@ GOLDEN = ROOT / "fixtures/golden/lehamim"
 
 def generate():
     original = (GOLDEN / "report.md").read_text(encoding="utf-8")
-    draft = DRAFT_MARKER_EN + "\n\n" + original
+    draft = DRAFT_MARKER + "\n\n" + original
     result = lint(GOLDEN, "reviewed")
     reasons = {
         "placeholder-left": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending.",

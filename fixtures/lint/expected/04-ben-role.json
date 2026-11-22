@@ -4,7 +4,7 @@
   "inputs": [
     {
       "file": "report.md",
-      "sha256": "4808855d5cadf922b8b82c07bef2adaef904b9ef9d3f275cef130e76544c9ba4"
+      "sha256": "56d3d614edc32449b2088cb4047ed8d82d2b6951b47a99a6f9b24ee1a7c33bb5"
     }
   ],
   "findings": [
