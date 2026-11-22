@@ -5,13 +5,63 @@ import sys
 import tempfile
 import unittest
 
-from arf.lint import inspect_artifact, lint
+from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
+from arf.lint.rules import MESSAGES
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
 GOLDEN = ROOT / "fixtures/golden/lehamim"
-GOOD = DRAFT_MARKER + "\n## 2. Findings\n| 1 | HTTP 403 and is-agentic blocked | impact |\n## 4. Offer\n1. Review\n## 5. Next\nTalk\n## Appendix\n| Source | Result |\n|---|---|\n| HTTP | OK |\n"
+COMMENT = "<!-- arf:draft run=unit-test -->"
+CONFIG = dict(prepared_by="Ben — Independent advisor", contact_email="ben@example.test", employer="Example Employer")
+GOOD = COMMENT + """
+# AgentReady report
+
+Prepared by: Ben — Independent advisor
+
+## Executive summary
+
+Proposal: Let's talk.
+
+## 1. Why it matters
+
+Context.
+
+## 2. Findings
+
+| # | Finding | Impact |
+|---|---|---|
+| 1 | HTTP 403 and is-agentic blocked | Cannot read |
+| 2 | Jina observation | Readability |
+| 3 | sitemap observation | Discovery |
+
+## 3. What works
+
+Content.
+
+## 4. Offer
+
+1. Access policy.
+2. Business identity.
+3. Product representation.
+4. Measurement.
+
+## 5. Next
+
+Talk.
+
+## Appendix
+
+| Source | Result |
+|---|---|
+| probes.csv | HTTP 403 |
+| discovery/0-0-0.body | Read |
+| discovery/0-0-1.body | Read |
+"""
+
+
+def rules(content, file="report.md", **kwargs):
+    return {f["rule"] for f in inspect_artifact(file, content, "shadow", **kwargs)}
 
 
 class LintTests(unittest.TestCase):
@@ -19,30 +69,51 @@ class LintTests(unittest.TestCase):
         return subprocess.run([sys.executable, "-m", "arf.lint", str(directory), *map(str, args)],
                               cwd=ROOT, text=True, capture_output=True)
 
-    def test_each_rule_positive_and_negative(self):
+    def write(self, root, file, content):
+        path = root / file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_text_rules_positive_and_negative(self):
         cases = {
-            "price-in-offer": GOOD.replace("Talk", "pricing: £20"),
+            "price-in-offer": GOOD.replace("Talk.", "50 USD"),
+            "generic-price": GOOD.replace("Content.", "Product price and cost"),
+            "currency-outside-offer": GOOD.replace("Content.", "A customer asks for a £20 product"),
             "code-block": GOOD + "\n`example`\n",
+            "implementation-detail": GOOD + "\nopeningHoursSpecification\n",
             "ben-role": GOOD + "\nBen is a team lead",
+            "employer-mention": GOOD + "\nExample Employer",
+            "prepared-by": GOOD.replace("Ben — Independent advisor", "Somebody else"),
+            "recipient-email": GOOD + "\nTo: recipient@example.test",
+            "sent-status": GOOD + "\nStatus: sent",
             "tracking-pixel": GOOD + '<img style="width:0px;height:1px" src="local.gif">',
-            "tracking-param": GOOD + "https://example.com/?gclid=abc",
-            "missing-appendix": GOOD.replace("## Appendix", "## Sources"),
-            "missing-draft-marker": GOOD.replace(DRAFT_MARKER, ""),
+            "tracking-param": GOOD + "https://example.test/?gclid=abc",
+            "link-shortener": GOOD + "https://bit.ly/example",
+            "non-evidence-url": GOOD + "https://unrelated.test/page",
+            "missing-appendix": GOOD.replace("| probes.csv | HTTP 403 |\n", ""),
+            "required-headings": GOOD.replace("## 1. Why it matters", "## Why it matters"),
+            "findings-table": GOOD.replace("| 2 | Jina observation | Readability |\n", ""),
+            "too-many-findings": GOOD.replace("| 3 | sitemap observation | Discovery |", "| 3 | sitemap observation | Discovery |\n| 4 | Jina | OK |\n| 5 | Jina | OK |\n| 6 | Jina | OK |"),
+            "israel-time": GOOD.replace("Content.", "Checked at 09:47"),
+            "missing-draft-marker": GOOD.replace(COMMENT, ""),
             "secret": GOOD + "\npassword = obviously_fake_value_123456789",
             "blocked-single-source": GOOD.replace(" and is-agentic", ""),
-            "extra-offer-steps": GOOD.replace("1. Review", "1. A\n2. B\n3. C\n4. D\n5. E"),
-            "uncited-finding": GOOD.replace("HTTP 403 and is-agentic blocked", "Observation"),
-            "placeholder-left": GOOD + "[CONTACT_NAME]",
+            "extra-offer-steps": GOOD.replace("4. Measurement.", "4. Measurement.\n5. Another pillar."),
+            "detailed-offer-step": GOOD.replace("1. Access policy.", "1. " + "word " * 41),
         }
         for rule, content in cases.items():
             with self.subTest(rule=rule):
-                self.assertIn(rule, {f["rule"] for f in inspect_artifact("report.md", content, "shadow")})
-                self.assertNotIn(rule, {f["rule"] for f in inspect_artifact("report.md", GOOD, "shadow")})
+                options = dict(config=CONFIG, allowed_hosts={"example.test"})
+                self.assertIn(rule, rules(content, **options))
+                self.assertNotIn(rule, rules(GOOD, **options))
+        self.assertEqual(rules(GOOD, config=CONFIG), set())
+        self.assertNotIn("placeholder-left", MESSAGES)
+        self.assertNotIn("placeholder-left", rules(GOOD + "[CONTACT_NAME]"))
 
     def test_lehamim_and_expected(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp) / "lint.json"
-            process = self.cli(GOLDEN, "--phase", "reviewed", "--ack", FIXTURES / "lehamim/lint-ack.json", "--out", out)
+            process = self.cli(GOLDEN, "--final", "--ack", FIXTURES / "lehamim/lint-ack.json", "--out", out)
             self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
             self.assertEqual(out.read_bytes(), (FIXTURES / "expected/lehamim.json").read_bytes())
             self.assertEqual(json.loads(out.read_text())["summary"]["hard_fail"], 0)
@@ -64,17 +135,17 @@ class LintTests(unittest.TestCase):
     def test_acks_and_line_stability(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            report = root / "report.md"
-            report.write_text(GOOD + "[CONTACT_NAME]\nBen is a team lead", encoding="utf-8")
+            content = GOOD + "\nProduct price\n\nBen is a team lead"
+            self.write(root, "report.md", content)
             findings = lint(root)["findings"]
             acks = [{**{key: f[key] for key in ("rule", "file", "fingerprint")}, "reason": "Test acknowledgement"} for f in findings]
-            acks.append(dict(rule="placeholder-left", file="report.md", fingerprint="unused", reason="Old finding"))
-            (root / "lint-ack.json").write_text(json.dumps(dict(version=1, acks=acks)))
-            report.write_text("\n\n" + GOOD + "[CONTACT_NAME]\nBen is a team lead", encoding="utf-8")
+            acks.append(dict(rule="generic-price", file="report.md", fingerprint="unused", reason="Old finding"))
+            self.write(root, "lint-ack.json", json.dumps(dict(version=1, acks=acks)))
+            self.write(root, "report.md", "\n\n" + content)
             result = lint(root)
             self.assertEqual(result["summary"], dict(hard_fail=1, warning=1, acknowledged=1, unacknowledged_warning=0))
             self.assertEqual({a["status"] for a in result["unused_acks"]}, {"unused", "hard-fail-ack-ignored"})
-            report.write_text(GOOD + "[CONTACT_NAME]", encoding="utf-8")
+            self.write(root, "report.md", GOOD + "\nProduct price")
             self.assertEqual(self.cli(root).returncode, 0)
             self.assertTrue((root / "lint.json").exists())
 
@@ -82,58 +153,130 @@ class LintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self.assertEqual(self.cli(root).returncode, 2)
-            (root / "report.md").write_text(GOOD)
+            self.write(root, "report.md", GOOD)
             for content in ("{", "[]", '{"version":2,"acks":[]}', '{"version":1,"acks":[{}]}'):
-                (root / "lint-ack.json").write_text(content)
+                self.write(root, "lint-ack.json", content)
                 self.assertEqual(self.cli(root).returncode, 2)
             (root / "lint-ack.json").unlink()
-            self.assertEqual(self.cli(root, "--phase", "unknown").returncode, 2)
-            self.assertEqual(self.cli(root, "--ack", root / "missing.json").returncode, 2)
-            self.assertEqual(self.cli(root, "--out", root / "report.md").returncode, 2)
-            self.assertEqual(self.cli(root, "--out", root / "missing/lint.json").returncode, 2)
+            for args in (("--phase", "unknown"), ("--ack", root / "missing.json"),
+                         ("--factory-config", root / "missing.json"), ("--out", root / "report.md"),
+                         ("--out", root / "missing/lint.json")):
+                self.assertEqual(self.cli(root, *args).returncode, 2)
+            self.write(root, "evidence.json", '{"files": ["wrong"]}')
+            self.assertEqual(self.cli(root).returncode, 2)
+            (root / "evidence.json").unlink()
             (root / "report.md").write_bytes(b"\xff")
             self.assertEqual(self.cli(root).returncode, 2)
 
-    def test_artifact_scope_and_variants(self):
-        self.assertEqual(inspect_artifact("report.md", GOOD, "shadow"), [])
-        for phase in ("reviewed", "volume"):
-            self.assertEqual(inspect_artifact("report.md", GOOD.replace(DRAFT_MARKER, ""), phase), [])
-        self.assertEqual(inspect_artifact("notes-for-ben.md", "`example`\nמחיר 50", "shadow"), [])
-        for text in ('<script src="https://www.googletagmanager.com/a.js"></script>',
-                     '![x](https://api.segment.io/x.png)', '![x](local.png){width=1 height=0}'):
-            self.assertIn("tracking-pixel", {f["rule"] for f in inspect_artifact("report.html", text, "reviewed")})
-        self.assertEqual(inspect_artifact("report.html", '<img width="100" height="100" src="https://example.com/a.png">', "reviewed"), [])
-        for text in ("dev team manager", "development team manager", "מנהל צוות פיתוח"):
-            self.assertIn("ben-role", {f["rule"] for f in inspect_artifact("notes-for-ben.md", text, "shadow")})
-        for code in ("    example", "~~~\nexample\n~~~", "```\nexample\n```"):
-            self.assertIn("code-block", {f["rule"] for f in inspect_artifact("report.md", GOOD + code, "shadow")})
-        self.assertIn("missing-appendix", {f["rule"] for f in inspect_artifact("report.md", "", "shadow")})
-        self.assertNotIn("price-in-offer", {f["rule"] for f in inspect_artifact("report.md", GOOD.replace("## 2. Findings", "## 2. Findings\nprice 200 ₪"), "shadow")})
+    def test_marker_phase_final_and_html_contract(self):
+        html = COMMENT + "<footer>" + DRAFT_MARKER + "</footer>"
+        for phase in ("shadow", "reviewed"):
+            for file, good in (("report.md", GOOD), ("report.html", html)):
+                self.assertNotIn("missing-draft-marker", {f["rule"] for f in inspect_artifact(file, good, phase)})
+                for old in ("טיוטה — לא לשליחה", "DRAFT — NOT FOR SENDING", DRAFT_MARKER,
+                            "<!-- arf:draft run= -->", "<!-- arf:draft run= -->" + DRAFT_MARKER):
+                    with self.subTest(phase=phase, file=file, marker=old):
+                        self.assertIn("missing-draft-marker", {f["rule"] for f in inspect_artifact(file, old, phase)})
+                self.assertNotIn("missing-draft-marker", {f["rule"] for f in inspect_artifact(file, "", phase, final=True)})
+        self.assertIn("missing-draft-marker", rules(COMMENT, "report.html"))
+        self.assertNotIn("missing-draft-marker", {f["rule"] for f in inspect_artifact("report.html", "", "volume")})
 
-    def test_old_provisional_markers_are_rejected(self):
-        for file in ("report.md", "report.html"):
-            for marker in ("טיוטה — לא לשליחה", "DRAFT — NOT FOR SENDING"):
-                with self.subTest(file=file, marker=marker):
-                    content = GOOD.replace(DRAFT_MARKER, marker)
-                    self.assertIn("missing-draft-marker", {
-                        f["rule"] for f in inspect_artifact(file, content, "shadow")
-                    })
-            self.assertNotIn("missing-draft-marker", {
-                f["rule"] for f in inspect_artifact(file, GOOD, "shadow")
-            })
+    def test_pricing_role_implementation_and_time_boundaries(self):
+        for phrase in ("הצעת מחיר", "תמחור", "עלות השירות", "מחירון", "price list", "pricing", "quote", "fee", "per hour", "hourly rate", "discount", "retainer"):
+            self.assertIn("price-in-offer", rules(phrase, "notes-for-ben.md"))
+        for phrase in ("50 ₪", "$ 50", "200 ש״ח", "NIS 30", "40 USD"):
+            self.assertIn("price-in-offer", rules(phrase, "notes-for-ben.md"))
+            self.assertIn("price-in-offer", rules(GOOD.replace("Let's talk.", phrase)))
+            self.assertIn("currency-outside-offer", rules(GOOD.replace("Content.", phrase)))
+        self.assertNotIn("price-in-offer", rules("בלי מחיר", "notes-for-ben.md"))
+        for role in ("dev team manager", "development team manager", "engineering manager", "R&D manager", "team lead", "ראש צוות", "מנהל צוות פיתוח", "מנהל פיתוח", "ראש צוות פיתוח"):
+            self.assertIn("ben-role", rules(role.upper(), "notes-for-ben.md"))
+        self.assertNotIn("ben-role", rules("תקציר מנהלים; מי שמנהל את האתר", "notes-for-ben.md"))
+        for token in ("application/ld+json", "@type", "Disallow:", "User-agent:", ".htaccess", "wp-config", "add the following", "הוסיפו את הקוד"):
+            self.assertIn("implementation-detail", rules(GOOD + token))
+            self.assertNotIn("implementation-detail", rules(token, "notes-for-ben.md"))
+        for offer in ("First, install it. Then, test it.", "שלב אחר שלב", "Pillar\n    1. Nested instruction"):
+            self.assertIn("detailed-offer-step", rules(GOOD.replace("Access policy.", offer)))
+        self.assertNotIn("israel-time", rules(GOOD + "\n## Checks (Israel time)\n\n09:47 checked"))
+        self.assertNotIn("israel-time", rules(GOOD + "\n09:47 Israel time"))
+        self.assertIn("israel-time", rules(GOOD + "\n09:47 checked"))
+        self.assertNotIn("blocked-single-source", rules(GOOD.replace("HTTP 403 and is-agentic blocked", "HTTP 403 blocked, not proven")))
+        self.assertNotIn("blocked-single-source", rules(GOOD.replace("HTTP 403 and is-agentic blocked", "HTTP 403 חסום, לא עקבי")))
 
-    def test_credentials_and_tracking_variants(self):
-        for credential in ("AKIAEXAMPLE0000000000", "sk-obviously_fake_123456789",
-                           "sk_live_obviously_fake_123456789", "ghp_obviously_fake_123456789",
-                           "github_pat_obviously_fake_123456789", "xoxb-obviously-fake-123456789",
-                           "-----BEGIN RSA PRIVATE KEY-----", "Bearer obviously_fake_123456789",
-                           "api_key='obviously_fake_123456789'"):
-            with self.subTest(credential=credential):
-                self.assertIn("secret", {f["rule"] for f in inspect_artifact("notes-for-ben.md", credential, "volume")})
-        self.assertEqual(inspect_artifact("notes-for-ben.md", "password = short\nBearer short", "volume"), [])
+    def test_media_and_credentials(self):
+        for media in ('<script>example()</script>', '<img src="https://example.test/a.png" width="100" height="100">',
+                      '<iframe src="https://api.segment.io/a"></iframe>', '![x](https://example.test/a.png)',
+                      '![x](local.png){width=1 height=0}'):
+            self.assertIn("tracking-pixel", rules(media, "report.html", final=True))
+        self.assertNotIn("tracking-pixel", rules('<img width="100" height="100" src="local.png">', "report.html", final=True))
+        for code in ("    example", "~~~\nexample\n~~~", "```\nexample\n```", "`example`"):
+            self.assertIn("code-block", rules(GOOD + code))
+        self.assertIn("code-block", rules("<pre>example</pre>", "report.html", final=True))
+        self.assertNotIn("code-block", rules("`example`", "notes-for-ben.md"))
+        for credential in ("AKIAEXAMPLE0000000000", "sk-obviously_fake_123456789", "sk_live_obviously_fake_123456789",
+                           "ghp_obviously_fake_123456789", "github_pat_obviously_fake_123456789", "xoxb-obviously-fake-123456789",
+                           "-----BEGIN RSA PRIVATE KEY-----", "Bearer obviously_fake_123456789", "api_key='obviously_fake_123456789'", "YWJj" * 24):
+            self.assertIn("secret", rules(credential, "notes-for-ben.md"))
+        self.assertNotIn("secret", rules("password = short\nBearer short", "notes-for-ben.md"))
         for parameter in ("utm_campaign", "fbclid", "mc_eid", "msclkid"):
-            self.assertIn("tracking-param", {f["rule"] for f in inspect_artifact("notes-for-ben.md", f"https://example.com/?{parameter}=x", "volume")})
-        self.assertEqual(inspect_artifact("notes-for-ben.md", "https://example.com/?campaign=x", "volume"), [])
+            self.assertIn("tracking-param", rules(f"https://example.test/?{parameter}=x", "notes-for-ben.md"))
+        self.assertNotIn("tracking-param", rules("https://example.test/?campaign=x", "notes-for-ben.md"))
+
+    def test_manifest_appendix_citations_pdf_and_skips(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            absent = lint(root)
+            self.assertTrue(absent["passed"])
+            self.assertTrue({"appendix-evidence", "non-evidence-url", "uncited-finding", "pdf-length", "prepared-by", "recipient-email", "employer-mention", "public-side-effect"}.issubset({s["rule"] for s in absent["skipped_checks"]}))
+            paths = ("probes.csv", "discovery/0-0-0.body", "discovery/0-0-1.body")
+            for path in paths:
+                self.write(root, path, "Fetched https://evidence.test/page")
+            self.write(root, "discovery.csv", "domain,path,url,status,size,body\nclient.test,/,https://evidence.test/page,200,1,discovery/0-0-0.body\n")
+            self.write(root, "evidence.json", json.dumps(dict(site="https://client.test", hosts=["client.test"], files=[dict(path=p) for p in (*paths, "discovery.csv")])))
+            self.write(root, "report.pdf", "/Type /Pages\n" + "/Type /Page\n" * 4)
+            self.assertTrue(lint(root)["passed"])
+            self.write(root, "report.pdf", "/Type /Page\n" * 5)
+            self.assertIn("pdf-length", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "report.md", GOOD.replace("probes.csv | HTTP", "unknown.csv | HTTP"))
+            self.assertIn("appendix-evidence", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "report.md", GOOD.replace("Jina observation", "[Jina](probes.csv)"))
+            self.assertNotIn("uncited-finding", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "report.md", GOOD.replace("Jina observation", "[Jina](missing.csv)"))
+            self.assertIn("uncited-finding", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "report.md", GOOD + "\nhttps://evidence.test/page")
+            self.assertNotIn("non-evidence-url", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "report.md", GOOD + "\nhttps://unrelated.test/page")
+            self.assertIn("non-evidence-url", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "probes.csv", "Captured HTML links to https://unrelated.test/page")
+            self.assertIn("non-evidence-url", {f["rule"] for f in lint(root)["findings"]})
+            self.write(root, "findings.json", '{"text":"Bearer obviously_fake_value_123456789"}')
+            result = lint(root)
+            self.assertIn("secret", {f["rule"] for f in result["findings"]})
+            self.assertTrue(any(s["rule"] == "uncited-finding" and "schema" in s["reason"] for s in result["skipped_checks"]))
+
+    def test_factory_config_and_contact_line(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD + "\nBen contact: ben@example.test")
+            for extension, content in (("json", json.dumps(CONFIG)), ("yaml", "\n".join(f"{key}: '{value}'" for key, value in CONFIG.items()))):
+                path = root / ("config." + extension)
+                self.write(root, path.name, content)
+                self.assertEqual(load_config(path), CONFIG)
+                self.assertTrue(lint(root, factory_config=path)["passed"])
+                self.assertEqual(self.cli(root, "--factory-config", path).returncode, 0)
+            self.write(root, "report.md", GOOD + "\nTo: ben@example.test")
+            self.assertIn("recipient-email", {f["rule"] for f in lint(root, factory_config=path)["findings"]})
+            for bad in ("{}", "prepared_by: |\n  multiline", "prepared_by: one\nprepared_by: two"):
+                self.write(root, path.name, bad)
+                self.assertEqual(self.cli(root, "--factory-config", path).returncode, 2)
+
+    def test_empty_and_structure_order(self):
+        self.assertTrue({"required-headings", "missing-appendix", "missing-draft-marker"}.issubset(rules("")))
+        self.assertIn("required-headings", rules(GOOD.replace("## 1. Why it matters", "## 3. Why it matters")))
+        self.assertIn("findings-table", rules(GOOD.replace("| 2 | Jina observation | Readability |", "| 2 | Jina observation | Readability | extra |")))
+        self.assertIn("sent-status", rules("סטטוס: נשלח", "notes-for-ben.md"))
+        self.assertNotIn("sent-status", rules("This draft must not be sent.", "notes-for-ben.md"))
 
 
 if __name__ == "__main__":

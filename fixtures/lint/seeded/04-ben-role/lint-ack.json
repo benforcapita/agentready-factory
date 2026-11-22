@@ -2,34 +2,64 @@
   "version": 1,
   "acks": [
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "3468061411e62bb5",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+      "fingerprint": "0264faa8e8d64de3",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "83897681178fcd56",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+      "fingerprint": "8d5354cb7ef8db76",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "file": "report.html",
-      "fingerprint": "9f14cb4d8da21edc",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+      "fingerprint": "9b6cf479b59160b8",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
-      "rule": "placeholder-left",
-      "file": "report.md",
-      "fingerprint": "c726e634e4add7dc",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+      "rule": "currency-outside-offer",
+      "file": "report.html",
+      "fingerprint": "c660c184076cf1bb",
+      "reason": "Finding 3 quotes the customer's product query מגש אירוח עד 200 ₪; this is not a service offer."
     },
     {
-      "rule": "uncited-finding",
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "f45aadb787c28281",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "fa6985362de515a0",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
+    },
+    {
+      "rule": "generic-price",
       "file": "report.md",
-      "fingerprint": "96f9c0483b2838a5",
-      "reason": "Golden narrative finding retained verbatim; supporting structured-data observations appear in the appendix and private notes."
+      "fingerprint": "7d73950ad0a4cf4f",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
+    },
+    {
+      "rule": "currency-outside-offer",
+      "file": "report.md",
+      "fingerprint": "0de1064b7c485db8",
+      "reason": "Finding 3 quotes the customer's product query מגש אירוח עד 200 ₪; this is not a service offer."
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.md",
+      "fingerprint": "55185581776ae23d",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.md",
+      "fingerprint": "955304f384c24b57",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     }
   ]
 }

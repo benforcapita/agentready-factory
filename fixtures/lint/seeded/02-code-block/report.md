@@ -1,4 +1,4 @@
-טיוטה — לא לשליחה · DRAFT
+<!-- arf:draft run=lint-fixture -->
 
 # דוח מוכנות לסוכני AI (AgentReady) — מאפיית לחמים
 

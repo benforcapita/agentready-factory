@@ -1,2 +1,3 @@
-# Matches T5 renderer marker; rule ids pending LLD §6.4.
+# Matches T5's footer text and LLD §6.2's md/html run marker contract.
 DRAFT_MARKER = "טיוטה — לא לשליחה · DRAFT"
+DRAFT_COMMENT = r"<!--\s*arf:draft\s+run=([^\s<>]+)\s*-->"

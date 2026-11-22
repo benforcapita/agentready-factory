@@ -1,34 +1,57 @@
 {
   "version": 1,
   "phase": "shadow",
+  "final": false,
   "inputs": [
     {
       "file": "report.md",
-      "sha256": "b61b819fb508a661107211560be7441542f5d9b2276fdb9c1eb4498814a70e71"
+      "sha256": "b156cb3f3c924cb3dba0a7872048379ef7c39ac3cd6606bb2cc0c6d9525939e9"
     }
   ],
   "findings": [
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "level": "warning",
       "file": "report.md",
-      "line": 5,
-      "excerpt": "[CONTACT_NAME]",
-      "message": "Fill or explicitly acknowledge this placeholder.",
-      "fingerprint": "c726e634e4add7dc",
+      "line": 18,
+      "excerpt": "החדשות הטובות: התוכן עצמו טוב. בדפי המוצר יש תיאור, משקל, מחיר, רכיבים וערכים תזונתיים. בדפי הסניפים יש כתובת ושעות פתיחה. החסר הוא בשכבה שמאפשרת למכונה לקרוא, להבין ולצטט את כל זה.",
+      "message": "Acknowledge generic price/cost language with its context.",
+      "fingerprint": "7d73950ad0a4cf4f",
       "acknowledged": true,
-      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+      "ack_reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
-      "rule": "uncited-finding",
+      "rule": "currency-outside-offer",
       "level": "warning",
       "file": "report.md",
-      "line": 35,
-      "excerpt": "| 2 | **אין \"תעודת זהות\" מובנית לעסק.** בעמוד הבית, בדף ההזמנות ובדף סניף לדוגמה יש נתונים מובנים כלליים בלבד (WebPage, ‏WebSite). אין הגדרה של לחמים כמאפייה או כעסק מקומי, ואין סניפים, שעות פתיחה או טלפון בפורמט שמכונה מזהה. | עוזר AI צריך \"לנחש\" מהטקסט מתי פתוח ואיפה. ניחוש כזה עלול להוביל לתשובה שגויה ללקוח, למשל על שעות שישי או ערבי חג. |",
-      "message": "Cite a source for this finding.",
-      "fingerprint": "96f9c0483b2838a5",
+      "line": 32,
+      "excerpt": "200 ₪",
+      "message": "Acknowledge currency amounts outside the proposal.",
+      "fingerprint": "0de1064b7c485db8",
       "acknowledged": true,
-      "ack_reason": "Golden narrative finding retained verbatim; supporting structured-data observations appear in the appendix and private notes."
+      "ack_reason": "Finding 3 quotes the customer's product query מגש אירוח עד 200 ₪; this is not a service offer."
+    },
+    {
+      "rule": "generic-price",
+      "level": "warning",
+      "file": "report.md",
+      "line": 36,
+      "excerpt": "| 3 | המוצרים לא מסומנים כמוצרים. כ־230 דפי מוצר מופיעים במפת האתר, עם תוכן עשיר, אבל בלי סימון מובנה של מוצר, מחיר וזמינות. דף \"הזמינו עכשיו\" עצמו כמעט ריק מטקסט: נמצאו בו רק התפריט והקישורים. | כשלקוח מבקש מעוזר AI \"מגש אירוח עד 200 ₪\" או \"מארז מתנה לחנוכה\", קשה לעוזר להציע מוצר ספציפי של לחמים ולשלוח את הלקוח להזמנה. |",
+      "message": "Acknowledge generic price/cost language with its context.",
+      "fingerprint": "55185581776ae23d",
+      "acknowledged": true,
+      "ack_reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
+    },
+    {
+      "rule": "generic-price",
+      "level": "warning",
+      "file": "report.md",
+      "line": 42,
+      "excerpt": "- דפי מוצר עשירים: תיאור, משקל, מחיר ל־100 גרם, רכיבים וערכים תזונתיים.",
+      "message": "Acknowledge generic price/cost language with its context.",
+      "fingerprint": "955304f384c24b57",
+      "acknowledged": true,
+      "ack_reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
       "rule": "ben-role",
@@ -44,31 +67,90 @@
   ],
   "unused_acks": [
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "3468061411e62bb5",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending.",
+      "fingerprint": "0264faa8e8d64de3",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
       "status": "unused"
     },
     {
-      "rule": "placeholder-left",
+      "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "83897681178fcd56",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending.",
+      "fingerprint": "8d5354cb7ef8db76",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
       "status": "unused"
     },
     {
-      "rule": "placeholder-left",
+      "rule": "currency-outside-offer",
       "file": "report.html",
-      "fingerprint": "9f14cb4d8da21edc",
-      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending.",
+      "fingerprint": "c660c184076cf1bb",
+      "reason": "Finding 3 quotes the customer's product query מגש אירוח עד 200 ₪; this is not a service offer.",
       "status": "unused"
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "9b6cf479b59160b8",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
+      "status": "unused"
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "f45aadb787c28281",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
+      "status": "unused"
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "fa6985362de515a0",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
+      "status": "unused"
+    }
+  ],
+  "skipped_checks": [
+    {
+      "rule": "appendix-evidence",
+      "reason": "evidence.json collector manifest is absent."
+    },
+    {
+      "rule": "employer-mention",
+      "reason": "Factory Config is absent; supply --factory-config PATH."
+    },
+    {
+      "rule": "non-evidence-url",
+      "reason": "evidence.json collector manifest is absent."
+    },
+    {
+      "rule": "pdf-length",
+      "reason": "report.pdf is absent."
+    },
+    {
+      "rule": "prepared-by",
+      "reason": "Factory Config is absent; supply --factory-config PATH."
+    },
+    {
+      "rule": "public-side-effect",
+      "reason": "No run/public-side-effect record format exists in this repository; no event schema invented."
+    },
+    {
+      "rule": "recipient-email",
+      "reason": "Factory Config is absent; supply --factory-config PATH."
+    },
+    {
+      "rule": "secret",
+      "reason": "Binary PDF streams and raw evidence captures are not text artifacts; scan report/notes and structured artifact text only. Notion pre-write is outside this command."
+    },
+    {
+      "rule": "uncited-finding",
+      "reason": "findings.json is absent; explicit report evidence links are checked when present."
     }
   ],
   "summary": {
     "hard_fail": 1,
-    "warning": 2,
-    "acknowledged": 2,
+    "warning": 4,
+    "acknowledged": 4,
     "unacknowledged_warning": 0
   },
   "passed": false
