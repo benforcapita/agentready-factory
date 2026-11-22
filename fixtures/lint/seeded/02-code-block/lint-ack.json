@@ -4,13 +4,13 @@
     {
       "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "0264faa8e8d64de3",
+      "fingerprint": "44543dc2db6c18e4",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
       "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "8d5354cb7ef8db76",
+      "fingerprint": "80c0a65554cdf2d2",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
@@ -28,13 +28,13 @@
     {
       "rule": "generic-price",
       "file": "report.html",
-      "fingerprint": "f45aadb787c28281",
+      "fingerprint": "9a706017820cd079",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
       "rule": "generic-price",
       "file": "report.html",
-      "fingerprint": "fa6985362de515a0",
+      "fingerprint": "05c0ff08ac5d29be",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
@@ -52,13 +52,13 @@
     {
       "rule": "generic-price",
       "file": "report.md",
-      "fingerprint": "55185581776ae23d",
+      "fingerprint": "af60363f578ded8d",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
     {
       "rule": "generic-price",
       "file": "report.md",
-      "fingerprint": "955304f384c24b57",
+      "fingerprint": "db30071ba2f95027",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     }
   ]

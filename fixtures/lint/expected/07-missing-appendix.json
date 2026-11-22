@@ -36,9 +36,9 @@
       "level": "warning",
       "file": "report.md",
       "line": 36,
-      "excerpt": "| 3 | המוצרים לא מסומנים כמוצרים. כ־230 דפי מוצר מופיעים במפת האתר, עם תוכן עשיר, אבל בלי סימון מובנה של מוצר, מחיר וזמינות. דף \"הזמינו עכשיו\" עצמו כמעט ריק מטקסט: נמצאו בו רק התפריט והקישורים. | כשלקוח מבקש מעוזר AI \"מגש אירוח עד 200 ₪\" או \"מארז מתנה לחנוכה\", קשה לעוזר להציע מוצר ספציפי של לחמים ולשלוח את הלקוח להזמנה. |",
+      "excerpt": "| 3 | המוצרים לא מסומנים כמוצרים. כ-230 דפי מוצר מופיעים במפת האתר, עם תוכן עשיר, אבל בלי סימון מובנה של מוצר, מחיר וזמינות. דף \"הזמינו עכשיו\" עצמו כמעט ריק מטקסט: נמצאו בו רק התפריט והקישורים. | כשלקוח מבקש מעוזר AI \"מגש אירוח עד 200 ₪\" או \"מארז מתנה לחנוכה\", קשה לעוזר להציע מוצר ספציפי של לחמים ולשלוח את הלקוח להזמנה. |",
       "message": "Acknowledge generic price/cost language with its context.",
-      "fingerprint": "55185581776ae23d",
+      "fingerprint": "af60363f578ded8d",
       "acknowledged": true,
       "ack_reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
@@ -47,9 +47,9 @@
       "level": "warning",
       "file": "report.md",
       "line": 42,
-      "excerpt": "- דפי מוצר עשירים: תיאור, משקל, מחיר ל־100 גרם, רכיבים וערכים תזונתיים.",
+      "excerpt": "- דפי מוצר עשירים: תיאור, משקל, מחיר ל-100 גרם, רכיבים וערכים תזונתיים.",
       "message": "Acknowledge generic price/cost language with its context.",
-      "fingerprint": "955304f384c24b57",
+      "fingerprint": "db30071ba2f95027",
       "acknowledged": true,
       "ack_reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote."
     },
@@ -58,9 +58,9 @@
       "level": "hard_fail",
       "file": "report.md",
       "line": 62,
-      "excerpt": "נספח — מקורות ומועדי בדיקה (שעון ישראל, 20.11.2026)",
+      "excerpt": "נספח - מקורות ומועדי בדיקה (שעון ישראל, 20.11.2026)",
       "message": "Include an appendix table with at least three data rows.",
-      "fingerprint": "048ad7289c4521bc",
+      "fingerprint": "8f4311d65929bfc1",
       "acknowledged": false,
       "ack_reason": null
     }
@@ -69,14 +69,14 @@
     {
       "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "0264faa8e8d64de3",
+      "fingerprint": "44543dc2db6c18e4",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
       "status": "unused"
     },
     {
       "rule": "generic-price",
       "file": "notes-for-ben.md",
-      "fingerprint": "8d5354cb7ef8db76",
+      "fingerprint": "80c0a65554cdf2d2",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
       "status": "unused"
     },
@@ -90,21 +90,21 @@
     {
       "rule": "generic-price",
       "file": "report.html",
+      "fingerprint": "05c0ff08ac5d29be",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
+      "status": "unused"
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
+      "fingerprint": "9a706017820cd079",
+      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
+      "status": "unused"
+    },
+    {
+      "rule": "generic-price",
+      "file": "report.html",
       "fingerprint": "9b6cf479b59160b8",
-      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
-      "status": "unused"
-    },
-    {
-      "rule": "generic-price",
-      "file": "report.html",
-      "fingerprint": "f45aadb787c28281",
-      "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
-      "status": "unused"
-    },
-    {
-      "rule": "generic-price",
-      "file": "report.html",
-      "fingerprint": "fa6985362de515a0",
       "reason": "Client product-page descriptions (including מחיר ל־100 גרם) and customer query examples describe the bakery, not Ben's service. Private notes say בלי מחיר as a reminder not to quote.",
       "status": "unused"
     }

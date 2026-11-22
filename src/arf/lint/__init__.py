@@ -200,8 +200,8 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
     if (root / "report.pdf").exists():
         pdf = read("report.pdf")
         if phase in {"shadow", "reviewed"} and not final and not has_draft_marker(pdf):
-            item = finding("missing-draft-marker", "report.pdf", 1, "PDF draft footer could not be verified")
-            item["message"] = "The PDF draft marker could not be verified in raw bytes or FlateDecode streams; do not send."
+            item = finding("missing-draft-marker", "report.pdf", 1, "PDF marker unverifiable")
+            item["message"] = "PDF marker unverifiable"
             findings.append(item)
         pages = len(re.findall(rb"/Type\s*/Page\b", pdf))
         if pages > 4:

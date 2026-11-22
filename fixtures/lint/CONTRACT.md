@@ -40,12 +40,13 @@ reviewed mode. Seeded drafts carry `<!-- arf:draft run=lint-fixture -->`.
 
 `placeholder-left` was removed: it is not an LLD rule and required a golden ack.
 
-Matching uses NFKC, removes all Unicode Cf format characters and removes Hebrew
-Mn niqqud/cantillation in U+0591–U+05C7. Other combining marks are preserved.
+Matching uses NFKC, removes all Unicode Cf format and Mn nonspacing characters,
+then maps every Unicode Pd dash to ASCII `-`.
 Semantic excerpts use this matching text, so invisible/fullwidth variants have
 stable fingerprints equivalent to their plain forms. Input hashes still cover
 the original bytes, and line numbers are preserved. Pricing phrases allow
-whitespace and English plurals (fees, discounts, retainers, hourly rates).
+whitespace/dash runs (`[\s-]+`) and English plurals (fees, discounts, retainers,
+hourly rates). The same separators apply between words in hard-rule phrases.
 
 ## Input contracts and skips
 
@@ -82,17 +83,25 @@ model has allow_public_scan/ben_ok authorization fields, but no run event record
 format exists. Authorization alone is not evidence of a public side effect.
 
 An existing report.pdf in shadow/reviewed (unless --final) must contain the exact
-`טיוטה — לא לשליחה · DRAFT` marker in raw bytes or a zlib-decompressed FlateDecode
-stream. UTF-8, UTF-16BE and UTF-16LE are checked, with an 8 MiB decoded-stream
-limit. An absent/unreadable marker is a hard `missing-draft-marker` with a
-"could not be verified" message, not a skip. Volume remains marker-exempt.
-Full PDF text extraction, including CID fonts, would require a new dependency;
-none is added. Encoded glyph IDs, other filters and unreadable streams fail
-closed rather than being assumed safe.
+`טיוטה — לא לשליחה · DRAFT` marker as an extracted text line on every page.
+The stdlib extractor follows the catalog's /Pages → /Kids → /Page tree, inherits
+page resources, and reads only each page's referenced /Contents streams (plain
+or FlateDecode). It extracts Tj/TJ/single-quote/double-quote text through the
+selected font's /ToUnicode CMap (bfchar and bfrange), including CID glyph IDs.
+It handles ordinary indirect objects and Flate object streams, as emitted by
+the actual T5 renderer. Both logical Hebrew and the renderer's visual ordering
+are recognized; no external extraction executable or dependency is used.
+Metadata/Info/XMP, unreferenced streams and raw byte matches never count.
+Input/decoded streams and total extracted text are bounded to 8 MiB. Unsupported
+filters, encryption, incremental updates, missing CMaps, unsupported text/graphics
+states, malformed objects and extraction errors fail closed with hard
+`missing-draft-marker` and the message `PDF marker unverifiable`, not a
+skip. This is conservative page-text extraction, not a general PDF renderer or
+verification of footer geometry. Volume and --final remain marker-exempt.
 
 Missing report.pdf skips PDF length. An existing PDF is counted using
 `/Type /Page` objects; zero visible objects is an explicit skip (compressed object
-streams are not decoded). Binary PDF text extraction and Notion pre-write secret
+streams are not decoded for length). PDF secret scanning and Notion pre-write secret
 scanning are deferred; raw evidence captures are inputs, not authored artifacts.
 Secrets are scanned in report.md, report.html, notes-for-ben.md, findings.json and
 evidence.json. Every deferred/missing-input check appears in `skipped_checks`.

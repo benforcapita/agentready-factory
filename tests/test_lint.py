@@ -4,10 +4,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unicodedata
 import zlib
 
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
+from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import MESSAGES, normalize_for_matching
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +90,46 @@ def pdf_stream(content):
     return (b"%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n2 0 obj\n"
             + f"<< /Length {len(compressed)} /Filter /FlateDecode >>\nstream\n".encode()
             + compressed + b"\nendstream\nendobj\n%%EOF")
+
+
+def page_pdf(text=DRAFT_MARKER, *, pages=1, compressed=True, metadata=None, operator="TJ", last_blank=False):
+    characters = sorted(set(DRAFT_MARKER + text))
+    codes = {char: index.to_bytes(2) for index, char in enumerate(characters)}
+    encoded = b"".join(codes[char] for char in text)
+    cmap = (f"{len(codes)} beginbfchar\n".encode() + b"\n".join(
+        b"<" + code.hex().encode() + b"> <" + char.encode("utf-16-be").hex().encode() + b">"
+        for char, code in codes.items()) + b"\nendbfchar")
+
+    def stream(raw, extra=b""):
+        if compressed:
+            raw = zlib.compress(raw)
+            extra += b" /Filter /FlateDecode"
+        return b"<< /Length " + str(len(raw)).encode() + extra + b" >>\nstream\n" + raw + b"\nendstream"
+
+    literal = b"(" + b"".join(f"\\{byte:03o}".encode() for byte in encoded) + b")"
+    shown = b"[<" + encoded.hex().encode() + b">] TJ" if operator == "TJ" else (
+        (b"0 0 " if operator == '"' else b"") + literal + b" " + operator.encode())
+    program = b"BT /F0 11 Tf 1 0 0 1 20 20 Tm " + shown + b" ET"
+    marker = DRAFT_MARKER.encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R >>",
+        b"<< /Type /Pages /Resources << /Font << /F0 3 0 R >> >> /Kids ["
+        + b" ".join(f"{9 + i} 0 R".encode() for i in range(pages)) + f"] /Count {pages} >>".encode(),
+        b"<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /ToUnicode 4 0 R >>",
+        stream(cmap), stream(program),
+        stream(marker if metadata == "XMP" else b"<x:xmpmeta/>", b" /Type /Metadata /Subtype /XML"),
+        stream(marker if metadata == "unused stream" else b""),
+        b"<< /Title (" + (b"\xfe\xff" + DRAFT_MARKER.encode("utf-16-be") if metadata == "Info" else b"title") + b") >>",
+        *[f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents [{7 if last_blank and i == pages - 1 else 5} 0 R] >>".encode() for i in range(pages)],
+    ]
+    result, offsets = b"%PDF-1.7\n", [0]
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(result))
+        result += f"{index} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref = len(result)
+    result += f"xref\n0 {len(offsets)}\n0000000000 65535 f \n".encode()
+    result += b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:])
+    return result + f"trailer\n<< /Size {len(offsets)} /Root 1 0 R /Info 8 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
 
 
 def rules(content, file="report.md", **kwargs):
@@ -270,9 +312,9 @@ class LintTests(unittest.TestCase):
                 self.write(root, path, "Fetched https://evidence.test/page")
             self.write(root, "discovery.csv", "domain,path,url,status,size,body\nclient.test,/,https://evidence.test/page,200,1,discovery/0-0-0.body\n")
             self.write(root, "evidence.json", json.dumps(dict(site="https://client.test", hosts=["client.test"], files=[dict(path=p) for p in (*paths, "discovery.csv")])))
-            self.write(root, "report.pdf", "/Type /Pages\n" + "/Type /Page\n" * 4 + DRAFT_MARKER)
+            (root / "report.pdf").write_bytes(page_pdf(pages=4))
             self.assertTrue(lint(root)["passed"])
-            self.write(root, "report.pdf", "/Type /Page\n" * 5 + DRAFT_MARKER)
+            (root / "report.pdf").write_bytes(page_pdf(pages=5))
             self.assertIn("pdf-length", {f["rule"] for f in lint(root)["findings"]})
             self.write(root, "report.md", GOOD.replace("probes.csv | HTTP", "unknown.csv | HTTP"))
             self.assertIn("appendix-evidence", {f["rule"] for f in lint(root)["findings"]})
@@ -330,8 +372,15 @@ class LintTests(unittest.TestCase):
             ("tilde fence", GOOD + "\n~~~\nexample\n~~~", "code-block"),
             ("indented fence", GOOD + "\n    ```\n    example\n    ```", "code-block"),
             ("step by step", GOOD.replace("Access policy.", "First, open it. Then, change it."), "detailed-offer-step"),
+            ("CGJ role", GOOD + "\ndev\u034f team manager", "ben-role"),
+            ("variation selector role", GOOD + "\nd\ufe0fev team manager", "ben-role"),
+            ("nonbreaking hyphen role", GOOD + "\ndev\u2011team\u2011manager", "ben-role"),
+            ("variation selector price", GOOD.replace("Talk.", "pr\ufe0fice list"), "price-in-offer"),
+            ("Arabic-Indic amount", GOOD.replace("Talk.", "٥٠ USD"), "price-in-offer"),
+            ("NBSP amount", GOOD.replace("Talk.", "50\u00a0USD"), "price-in-offer"),
         ]
-        for phrase in ("price   list", "price\nlist", "price lists", "quotes", "retainers", "hourly   rates", "per\thour", "הצעת   מחיר", "עלות\nהשירות"):
+        for phrase in ("price   list", "price\nlist", "price lists", "quotes", "retainers", "hourly   rates", "per\thour", "הצעת   מחיר", "עלות\nהשירות",
+                       "price-list", "price–list", "price—list", "per-hour", "hourly-rate", "per hour", "hourly rate"):
             cases.append((phrase, GOOD.replace("Talk.", phrase), "price-in-offer"))
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -353,13 +402,27 @@ class LintTests(unittest.TestCase):
         self.assertEqual(normalize_for_matching("רֹאשׁ\u200b צֶוֶת\u200d"), "ראש צות")
         self.assertEqual(normalize_for_matching("５０ ＵＳＤ"), "50 USD")
         self.assertEqual(normalize_for_matching("e\u0301"), "é")
+        self.assertEqual(normalize_for_matching("x\u034f\ufe0f\u0301—–‑‐"), "x----")
+        for code in range(sys.maxunicode + 1):
+            char = chr(code)
+            category = unicodedata.category(char)
+            if category in {"Cf", "Mn", "Pd"}:
+                self.assertEqual(normalize_for_matching(char), "-" if category == "Pd" else "", hex(code))
         original = inspect_artifact("notes-for-ben.md", "dev team manager", "shadow")
         evasion = inspect_artifact("notes-for-ben.md", "\n\ndev\u200b team\u200d manager", "shadow")
         self.assertEqual(original[0]["fingerprint"], evasion[0]["fingerprint"])
         for role in ("ר\u0591אש צוות", "מְנַהֵל צֶוֶת פִּתּוּחַ", "dev\u2060 team manager", "dev&#8203; team manager"):
             self.assertIn("ben-role", rules(role, "report.html", final=True))
+        for phrase in ("ראש—צוות", "dev - team‑manager", "engineering––manager"):
+            self.assertIn("ben-role", rules(phrase, "notes-for-ben.md"))
+        for phrase in ("הצעת—מחיר", "עלות–השירות", "price -- lists"):
+            self.assertIn("price-in-offer", rules(phrase, "notes-for-ben.md"))
+        self.assertIn("implementation-detail", rules(GOOD + "\nadd—the—following"))
+        self.assertIn("employer-mention", rules("Example—Employer", "notes-for-ben.md", config=CONFIG))
+        self.assertIn("secret", rules("-----BEGIN—RSA—PRIVATE—KEY-----", "notes-for-ben.md"))
+        self.assertNotIn("israel-time", rules("09:00 Israel—time", "notes-for-ben.md"))
 
-    def test_pdf_marker_raw_flate_and_fail_closed(self):
+    def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self.write(root, "report.md", GOOD)
@@ -370,11 +433,21 @@ class LintTests(unittest.TestCase):
                     ("empty PDF", b"", 1),
                     ("Flate without marker", pdf_stream(b"no marker"), 1),
                     ("corrupt Flate", b"<< /Filter /FlateDecode >>\nstream\nbroken\nendstream", 1),
-                    ("raw UTF8", absent + DRAFT_MARKER.encode("utf-8"), 0),
-                    ("raw UTF16BE", absent + DRAFT_MARKER.encode("utf-16-be"), 0),
-                    ("Flate UTF8", pdf_stream(DRAFT_MARKER.encode("utf-8")), 0),
-                    ("Flate UTF16BE", pdf_stream(DRAFT_MARKER.encode("utf-16-be")), 0),
-                    ("Flate UTF16LE", pdf_stream(DRAFT_MARKER.encode("utf-16-le")), 0),
+                    ("raw UTF8", absent + DRAFT_MARKER.encode("utf-8"), 1),
+                    ("raw UTF16BE", absent + DRAFT_MARKER.encode("utf-16-be"), 1),
+                    ("Flate UTF8", pdf_stream(DRAFT_MARKER.encode("utf-8")), 1),
+                    ("Flate UTF16BE", pdf_stream(DRAFT_MARKER.encode("utf-16-be")), 1),
+                    ("Flate UTF16LE", pdf_stream(DRAFT_MARKER.encode("utf-16-le")), 1),
+                    ("page TJ Flate", page_pdf(), 0),
+                    ("page Tj raw", page_pdf(compressed=False, operator="Tj"), 0),
+                    ("page single quote", page_pdf(operator="'"), 0),
+                    ("page double quote", page_pdf(operator='"'), 0),
+                    ("Info only", page_pdf("", metadata="Info"), 1),
+                    ("XMP only", page_pdf("", metadata="XMP"), 1),
+                    ("unused stream only", page_pdf("", metadata="unused stream"), 1),
+                    ("blank page", page_pdf(""), 1),
+                    ("no pages", page_pdf(pages=0), 1),
+                    ("one unmarked page", page_pdf(pages=2, last_blank=True), 1),
                 ):
                     with self.subTest(phase=phase, pdf=name):
                         (root / "report.pdf").write_bytes(pdf)
@@ -384,10 +457,47 @@ class LintTests(unittest.TestCase):
                         active = {f["rule"] for f in result["findings"]}
                         self.assertEqual(active, {"missing-draft-marker"} if code else set())
                         if code:
-                            self.assertIn("could not be verified", result["findings"][0]["message"])
+                            self.assertEqual("PDF marker unverifiable", result["findings"][0]["message"])
             (root / "report.pdf").write_bytes(absent)
             self.assertEqual(self.cli(root, "--final").returncode, 0)
             self.assertEqual(self.cli(root, "--phase", "volume").returncode, 0)
+
+    def test_rendered_shadow_pdf_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            output = root / "rendered"
+            process = subprocess.run([sys.executable, "-m", "arf.render", str(GOLDEN / "report.md"),
+                                      "--out", str(output), "--run-id", "lint-regression"],
+                                     cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            pdf = (output / "report.pdf").read_bytes()
+            self.assertTrue(has_draft_marker(pdf))
+            self.assertGreater(len(list(Document(pdf).pages())), 0)
+            (root / "report.pdf").write_bytes(pdf)
+            for phase in ("shadow", "reviewed"):
+                first = self.cli(root, "--phase", phase)
+                self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+                before = (root / "lint.json").read_bytes()
+                self.assertEqual(self.cli(root, "--phase", phase).returncode, 0)
+                self.assertEqual((root / "lint.json").read_bytes(), before)
+
+    def test_pdf_cmaps_and_invalid_structures(self):
+        mapping = unicode_map(b"1 beginbfrange <01> <03> <05d0> endbfrange")
+        self.assertEqual(decode_text(b"\x01\x02\x03", mapping), "אבג")
+        mapping = unicode_map(b"1 beginbfrange <01> <03> [<05d0> <05d1> <05d2>] endbfrange")
+        self.assertEqual(decode_text(b"\x01\x02\x03", mapping), "אבג")
+        for raw in (b"", b"1 beginbfchar <01> <ff> endbfchar", b"1 beginbfrange <03> <01> <0041> endbfrange",
+                    b"1 beginbfrange <01> <03> [<0041>] endbfrange"):
+            with self.subTest(cmap=raw), self.assertRaises(PDFError):
+                unicode_map(raw)
+        with self.assertRaises(PDFError):
+            decode_text(b"\x04", mapping)
+        for bad in (page_pdf().replace(b"/Pages 2 0 R", b"/Pages 1 0 R"),
+                    page_pdf().replace(b"/ToUnicode 4 0 R", b"/ToUnicode 0 0 R"),
+                    page_pdf().replace(b"/FlateDecode", b"/ASCIIHexDecode"),
+                    page_pdf()[:-30]):
+            self.assertFalse(has_draft_marker(bad))
 
     def test_structured_findings_grounding_and_shapes(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -444,7 +554,7 @@ class LintTests(unittest.TestCase):
                 self.write(root, path, "observation")
             self.write(root, "findings.json", json.dumps({"findings": [{"id": 1, "evidence": ["probes.csv"]}]}))
             self.write(root, "evidence.json", json.dumps({"files": [{"path": path} for path in paths]}))
-            (root / "report.pdf").write_bytes(pdf_stream(DRAFT_MARKER.encode("utf-8")))
+            (root / "report.pdf").write_bytes(page_pdf())
             self.assertEqual(self.cli(root).returncode, 0)
             first = (root / "lint.json").read_bytes()
             self.assertEqual(self.cli(root).returncode, 0)
