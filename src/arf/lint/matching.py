@@ -14,14 +14,34 @@ class Visible(HTMLParser):
         super().__init__(convert_charrefs=False)
         self.source, self.chars, self.spans = source, [], []
         self.lines = [0] + [m.end() for m in re.finditer("\n", source)]
+        self.tags = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        hidden = "hidden" in attrs or bool(re.search(
+            r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!important\s*)?(?:;|$)",
+            attrs.get("style", ""), re.I))
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.tags.append((tag, hidden or any(hidden for _, hidden in self.tags)))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.tags) - 1, -1, -1):
+            if self.tags[index][0] == tag:
+                del self.tags[index:]
+                break
 
     def handle_data(self, data):
+        if any(hidden for _, hidden in self.tags) or (
+                any(tag in {"sup", "sub"} for tag, _ in self.tags) and data.strip().isdecimal()):
+            return
         line, column = self.getpos()
         offset = self.lines[line - 1] + column
         self.chars.extend(data)
         self.spans.extend((offset + i, offset + i + 1) for i in range(len(data)))
 
     def entity(self, token):
+        if any(hidden for _, hidden in self.tags):
+            return
         line, column = self.getpos()
         start = self.lines[line - 1] + column
         end = start + len(token)
@@ -42,6 +62,9 @@ def visible(source):
     masked = list(source)
     for match in re.finditer(r"\[[^\]\n]*\](\([^\n)]*\))", source):
         masked[match.start(1):match.end(1)] = " " * len(match[1])
+    for match in re.finditer(r"\[[^\]\n]*\](\[[^\]\n]*\])|(?P<footnote>\[\^[^\]\n]+\])", source):
+        start, end = match.span("footnote") if match["footnote"] else match.span(1)
+        masked[start:end] = " " * (end - start)
     text = "".join(masked)
     if "<" not in text and "&" not in text:
         return text, [(i, i + 1) for i in range(len(text))]
@@ -65,7 +88,7 @@ def units(text, spans):
         normalized = unicodedata.normalize("NFKC", text[index:end]).casefold()
         for char in normalized:
             if not letter_or_number(char):
-                if char in "₪$€£":
+                if char in "₪$€£¥₹":
                     yield char, (spans[index][0], spans[end - 1][1])
                 continue
             if char.isdecimal():
@@ -123,10 +146,33 @@ class Skeleton:
         return Match(self.source, self.spans[start][0], self.spans[end - 1][1])
 
 
+HEBREW_PREFIXES = "והבכלמש"
+HEBREW_SUFFIXES = ("", "ים", "ות", "י", "ה", "ו", "ם", "ן", "ת", "יו", "יה", "יהם", "יהן",
+                   "יכם", "יכן", "ינו", "נו", "ך", "כם", "כן")
+
+
+def hebrew_pattern(phrase):
+    prefix = "[" + re.escape(Skeleton(HEBREW_PREFIXES).text) + "]*"
+    suffix = "(?:" + "|".join(sorted({re.escape(Skeleton(s).text) for s in HEBREW_SUFFIXES},
+                                    key=lambda s: (-len(s), s))) + ")"
+    words = []
+    for index, word in enumerate(phrase.split()):
+        if index and word.startswith("ה"):
+            word = word[1:]
+        forms = {word}
+        if word.endswith("ת") and not word.endswith("ות"):
+            forms.update((word[:-1] + "ה", word[:-1] + "ות"))
+        root = "(?:" + "|".join(sorted({re.escape(Skeleton(w).text) for w in forms})) + ")"
+        words.append(prefix + root + suffix)
+    return re.compile("".join(words))
+
+
 class PhraseMatcher:
     def __init__(self, phrases):
         self.phrases = tuple(phrases)
-        self.keys = tuple(sorted({Skeleton(phrase).text for phrase in phrases}, key=lambda p: (-len(p), p)))
+        self.keys = tuple(sorted({Skeleton(phrase).text for phrase in phrases if not re.search("[א-ת]", phrase)},
+                                 key=lambda p: (-len(p), p)))
+        self.hebrew = tuple({hebrew_pattern(phrase) for phrase in phrases if re.search("[א-ת]", phrase)})
 
     def finditer(self, source):
         skeleton, found = Skeleton(source), []
@@ -137,6 +183,15 @@ class PhraseMatcher:
                 if skeleton.boundary(start, end):
                     found.append(skeleton.match(start, end))
                 start = skeleton.text.find(key, start + 1)
+        for pattern in self.hebrew:
+            cursor = 0
+            while match := pattern.search(skeleton.text, cursor):
+                start = match.start()
+                for end in range(match.end(), start, -1):
+                    if skeleton.boundary(start, end) and pattern.fullmatch(skeleton.text, start, end):
+                        found.append(skeleton.match(start, end))
+                        break
+                cursor = start + 1
         cursor = -1
         for match in sorted(found, key=lambda m: (m.start(), -m.end())):
             if match.start() >= cursor:
@@ -145,9 +200,11 @@ class PhraseMatcher:
 
 
 class MoneyMatcher:
-    codes = r"(?:nis|ils|usd|eur|gbp|jpy|chf|aud|cad|sgd|aed|hkd|nzd|brl|שח)"
-    currency = rf"(?:₪|(?:us|ca|hk|nz|au|sg|a|c|r)?\$|€|£|{codes})"
-    pattern = re.compile(rf"\d+{currency}|{currency}\d+|(?:us|ca|hk|nz|au|sg|a|c|r)?\$|[₪€£]")
+    codes = "(?:" + "|".join(sorted((Skeleton(code).text for code in (
+        "nis", "ils", "usd", "eur", "gbp", "jpy", "chf", "aud", "cad", "sgd", "aed", "hkd", "nzd", "brl",
+        "שח", "שקל", "שקלים", "dollar", "dollars", "euro", "euros")), key=len, reverse=True)) + ")"
+    currency = rf"(?:₪|(?:us|ca|hk|nz|au|sg|a|c|r)?\$|€|£|¥|₹|{codes})"
+    pattern = re.compile(rf"\d+{currency}|{currency}\d+|(?:us|ca|hk|nz|au|sg|a|c|r)?\$|[₪€£¥₹]")
     code_pattern = re.compile(rf"\d+{codes}|{codes}\d+")
 
     def finditer(self, source):
@@ -165,12 +222,12 @@ PRICING_PHRASES = (
     "הצעת מחיר", "תמחור", "עלות השירות", "מחירון", "price list", "price lists", "pricing",
     "quote", "quotes", "quotation", "quotations", "price quote", "price quotes",
     "price quotation", "price quotations", "fee", "fees", "per hour", "hourly rate",
-    "hourly rates", "discount", "discounts", "retainer", "retainers",
+    "hourly rates", "discount", "discounts", "retainer", "retainers", "quoted", "discounted", "per hr",
 )
 ROLE_PHRASES = tuple(
     phrase + suffix for phrase in (
         "dev team manager", "development team manager", "engineering manager",
-        "R&D manager", "R and D manager", "team lead",
+        "R&D manager", "R and D manager", "team lead", "team leader", "development manager", "tech lead",
     ) for suffix in ("", "s")
 ) + tuple(dict.fromkeys(
     phrase.replace("צוות", team).replace("פיתוח", development)

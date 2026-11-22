@@ -1,6 +1,9 @@
-"""Pinned letter-only UTS #39 confusables subset (Unicode 18.0, Unicode License v3).
+"""Curated UTS #39 derivative (Unicode 18.0, Unicode License v3).
 
-Source: https://www.unicode.org/Public/security/18.0.0/confusables.txt
+Source: https://www.unicode.org/Public/security/latest/confusables.txt
+Frozen from the 2026-08-06 data, not downloaded at runtime. Of 506 folded
+entries, 458 agree with that source and 48 are author base-letter folds,
+including accent/compatibility decompositions and named small capitals.
 ASCII letters/digits remain canonical; compatibility accents are folded separately.
 """
 

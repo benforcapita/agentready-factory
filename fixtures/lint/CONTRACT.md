@@ -62,6 +62,24 @@ Unfinished HTML tokens are treated as literal text, failing closed for separator
 insertion probes rather than allowing a stray `<` to swallow a prohibited phrase.
 Other non-phrase rules retain their existing syntax-aware regexes and normalization.
 
+Hebrew phrases accept arbitrary stacks of ו/ה/ב/כ/ל/מ/ש clitics and usual
+nominal suffixes on each word, including construct י/ת and feminine ה/ת/ות
+alternations. Outer word boundaries remain mandatory; English boundaries are
+unchanged. Generated tests exhaust all stacks through length three crossed with
+every supported suffix on every Hebrew phrase, plus longer-stack checks.
+Hidden/display:none/visibility:hidden elements, numeric superscript/subscript
+annotations, footnote markers and reference-link destinations are excluded from
+visible phrase text. Common leader/feminine role and pricing inflections and
+שקל/שקלים/dollars/euros/¥/₹ amounts are supported.
+
+REWORK #5 scoped observations: N1 sentence punctuation remains fail-closed
+because REWORK #4 explicitly requires punctuation insertion and price: list to
+hard-fail; lowercase ISO currency homonyms remain currency candidates. N2 bidi
+override visual reversal is not reconstructed (requires rendered bidi semantics).
+N4 quote/team lead context remains phrase-based per the LLD, not semantic judging.
+N5 confusables are a frozen curated derivative of security/latest (458 source
+agreements and 48 author folds), not a verbatim subset or a live network input.
+
 ## Input contracts and skips
 
 The existing collector writes `evidence.json` with `site`, `hosts` and

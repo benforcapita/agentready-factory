@@ -1,4 +1,5 @@
 import json
+from itertools import product
 from pathlib import Path
 import string
 import subprocess
@@ -11,7 +12,7 @@ import zlib
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.confusables import CONFUSABLES
-from arf.lint.matching import MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton
+from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
@@ -539,6 +540,52 @@ class LintTests(unittest.TestCase):
                 found[0][1]
         self.assertEqual(list(MoneyMatcher().finditer("")), [])
         self.assertEqual(list(matcher.finditer("team<broken")), [])
+
+    def test_hebrew_affix_class(self):
+        prefixes = ["".join(chars) for length in range(4) for chars in product(HEBREW_PREFIXES, repeat=length)]
+        for rule, phrases in (("ben-role", ROLE_PHRASES), ("price-in-offer", PRICING_PHRASES)):
+            matcher = PhraseMatcher(phrases)
+            self.assertNotIn(rule, WARNINGS)
+            for phrase in phrases:
+                if not any("א" <= char <= "ת" for char in phrase):
+                    continue
+                words = phrase.split()
+                word_skeletons = [Skeleton(word).text for word in words]
+                for prefix, suffix in product(prefixes, HEBREW_SUFFIXES):
+                    probe = Skeleton(prefix).text + "".join(word + Skeleton(suffix).text for word in word_skeletons)
+                    self.assertTrue(any(pattern.search(probe) for pattern in matcher.hebrew),
+                                    (phrase, prefix, suffix))
+                for position in range(len(words)):
+                    for prefix, suffix in product(HEBREW_PREFIXES, HEBREW_SUFFIXES):
+                        variant = words.copy()
+                        variant[position] = prefix + variant[position] + suffix
+                        self.assertTrue(list(matcher.finditer(" ".join(variant))), variant)
+        for phrase in ("אכראש צוות", "ראש צוותא", "paper hour", "steam leads", "תקציר מנהלים", "מי שמנהל את האתר"):
+            self.assertNotIn("ben-role", rules(phrase, "notes-for-ben.md"))
+            self.assertNotIn("price-in-offer", rules(phrase, "notes-for-ben.md"))
+        self.assertIn("ben-role", rules("וכשבמהלראש צוותים", "notes-for-ben.md"))
+
+    def test_rework5_cli_probes(self):
+        roles = ("כראש צוות", "וראש צוות", "לראש צוות", "ראש צוותים", "ומנהל פיתוח", "כמנהל פיתוח",
+                 "כמנהל צוות פיתוח", "ראש הצוות", "ראשת צוות", "מנהלת פיתוח", "team leader", "team leaders",
+                 "development manager", "tech lead", 'team<span hidden>x</span> lead',
+                 'team<span style="display:none">x</span> lead', "team<sup>1</sup> lead", "team[^1] lead",
+                 "[team][a] lead", "בן שימש בעבר כראש צוות פיתוח ויודע לעבוד עם צוותי אתרים.")
+        prices = ("התמחור", "בתמחור", "ותמחור", "תמחורים", "ועלות השירות", "המחירון", "בהצעת מחיר",
+                  "את התמחור נסגור בפגישה.", "quoted", "discounted", "per hr", "50 שקל", "50 שקלים",
+                  "50 dollars", "50 euros", "50 ¥", "50 ₹")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for expected, probes in (("ben-role", roles), ("price-in-offer", prices)):
+                for probe in probes:
+                    with self.subTest(probe=probe):
+                        self.write(root, "report.md", GOOD.replace("Talk.", probe))
+                        process = self.cli(root)
+                        self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
+                        before = (root / "lint.json").read_bytes()
+                        self.assertEqual({f["rule"] for f in json.loads(before)["findings"] if f["level"] == "hard_fail"}, {expected})
+                        self.assertEqual(self.cli(root).returncode, 1)
+                        self.assertEqual((root / "lint.json").read_bytes(), before)
 
     def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
