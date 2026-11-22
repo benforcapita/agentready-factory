@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import socket
+from socketserver import BaseRequestHandler, ThreadingTCPServer
 import sys
 from threading import Thread
 from time import sleep
@@ -22,6 +23,35 @@ def resolve(host, port, **kwargs):
 
 def local_policy():
     return GuardPolicy({host: ("127.0.0.1/32",) for host in ("shop.example", "www.shop.example")})
+
+
+@contextmanager
+def closing_server():
+    class Handler(BaseRequestHandler):
+        def handle(self):
+            try:
+                self.request.recv(1)
+            except OSError:
+                pass
+
+    class Server(ThreadingTCPServer):
+        daemon_threads = True
+
+        def get_request(self):
+            request = super().get_request()
+            self.accepted += 1
+            return request
+
+    instance = Server(("127.0.0.1", 0), Handler)
+    instance.accepted = 0
+    thread = Thread(target=instance.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield instance
+    finally:
+        instance.shutdown()
+        instance.server_close()
+        thread.join()
 
 
 @contextmanager
