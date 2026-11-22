@@ -97,6 +97,9 @@ class TransitionTests(unittest.TestCase):
             ("task", "Accepted", "Requested"),
             ("task", "Duplicate", "Claimed"),
             ("task", "Cancelled", "Requested"),
+            ("task", "Failed", "Requested"),
+            ("task", "Guardrail blocked", "Requested"),
+            ("task", "Claimed", "Guardrail blocked"),
             ("task", "Requested", "Done"),
             ("run", "queued", "succeeded"),
             ("run", "running", "queued"),
@@ -243,20 +246,49 @@ class RunTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.store.runs[submission.run.id].status = "running"
 
-    def test_retry_links_previous_run(self):
+    def test_duplicate_of_blocked_task_needs_force(self):
+        orchestrator = self.orchestrator(FakeSteps([False]))
+        first = orchestrator.submit(request())
+        orchestrator.execute(first.task.id)
+        for _ in range(5):
+            again = orchestrator.submit(request())
+            self.assertEqual((again.needs_force, again.retried, again.reused), (True, False, False))
+            self.assertEqual((again.task.id, again.run.id), (first.task.id, first.run.id))
+        self.assertEqual(list(self.store.runs), [first.run.id])
+        self.assertEqual(self.store.tasks[first.task.id].status, "Guardrail blocked")
+        duplicates = [t for t in self.store.tasks.values() if t.duplicate_of == first.task.id]
+        self.assertEqual({t.status for t in duplicates}, {"Duplicate"})
+        self.assertEqual(len(duplicates), 5)
+
+    def test_force_retries_blocked_task_with_retry_of(self):
         steps = FakeSteps([False])
         orchestrator = self.orchestrator(steps)
         first = orchestrator.submit(request())
         orchestrator.execute(first.task.id)
         steps.results = [True]
-        retry = orchestrator.submit(request())
+        retry = orchestrator.submit(request(force=True))
         self.assertTrue(retry.retried)
-        self.assertEqual((retry.task.id, retry.run.retry_of, retry.task.status), (first.task.id, first.run.id, "Requested"))
+        self.assertEqual((retry.task.id, retry.run.retry_of, retry.task.status), (first.task.id, first.run.id, "Claimed"))
         self.assertEqual(orchestrator.execute(retry.task.id).status, "Needs review")
         task = self.store.tasks[first.task.id]
         self.assertEqual((task.runs, task.latest_run), ((first.run.id, retry.run.id), retry.run.id))
+        self.assertEqual(len(self.store.tasks), 1)
+        history = statuses(self.store, TASKS.title, task.id)
+        self.assertEqual(history[history.index("Guardrail blocked"):], ["Guardrail blocked", *HAPPY_PATH[1:]])
         self.assertEqual(self.store.runs[first.run.id].status, "guardrail_blocked")
         self.assertEqual(self.store.runs[retry.run.id].properties()["Retry of"], [first.run.id])
+        self.assertEqual(statuses(self.store, RUNS.title, retry.run.id), ["queued", "running", "succeeded"])
+
+    def test_force_retries_failed_task(self):
+        steps = FakeSteps(fail_at="collect")
+        orchestrator = self.orchestrator(steps)
+        first = orchestrator.submit(request())
+        self.assertEqual(orchestrator.execute(first.task.id).status, "Failed")
+        self.assertTrue(orchestrator.submit(request()).needs_force)
+        steps.fail_at = None
+        retry = orchestrator.submit(request(force=True))
+        self.assertEqual((retry.task.id, retry.task.status, retry.run.retry_of), (first.task.id, "Claimed", first.run.id))
+        self.assertEqual(orchestrator.execute(retry.task.id).status, "Needs review")
 
     def test_retry_requires_failed_task(self):
         orchestrator = self.orchestrator(FakeSteps())

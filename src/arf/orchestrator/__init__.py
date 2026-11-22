@@ -25,14 +25,14 @@ _STOP = ("Failed", "Cancelled")
 
 TASK_TRANSITIONS: dict[str, frozenset[str]] = {
     "Requested": frozenset({"Claimed", "Rejected request", "Duplicate", "Cancelled"}),
-    "Claimed": frozenset({"Collecting evidence", "Guardrail blocked", *_STOP}),
+    "Claimed": frozenset({"Collecting evidence", *_STOP}),
     "Collecting evidence": frozenset({"Drafting", *_STOP}),
     "Drafting": frozenset({"Rendering", *_STOP}),
     "Rendering": frozenset({"Checking", *_STOP}),
     "Checking": frozenset({"Needs review", "Drafting", "Guardrail blocked", *_STOP}),
     "Needs review": frozenset({"Accepted", "Accepted with edits", "Rejected", "Cancelled"}),
-    "Failed": frozenset({"Requested"}),
-    "Guardrail blocked": frozenset({"Requested"}),
+    "Failed": frozenset({"Claimed"}),
+    "Guardrail blocked": frozenset({"Claimed"}),
     "Accepted": frozenset(),
     "Accepted with edits": frozenset(),
     "Rejected": frozenset(),
@@ -246,6 +246,7 @@ class Submission:
     run: Run
     reused: bool = False
     retried: bool = False
+    needs_force: bool = False
 
 
 class Orchestrator:
@@ -264,23 +265,27 @@ class Orchestrator:
         self._requests: dict[str, Any] = {}
 
     def submit(self, request: Any) -> Submission:
-        """Record a request as a Requested Task with a queued Run, or reuse the existing Run.
+        """Record a request as a Requested Task with a queued Run, or reuse the existing Task.
 
-        A request with the same idempotency key as an open or finished Task reuses its latest
-        Run (the new Task is recorded as Duplicate). A Failed or Guardrail blocked Task gets a
-        retry Run linked through Retry of. `force: true` always starts a fresh Task and Run.
+        LLD §4.1/§4.2/§7.2, by the latest Task with the same idempotency key:
+        - Failed or Guardrail blocked: without `force: true` no Run starts; the request is
+          recorded as Duplicate and `needs_force` asks for a resubmit with `force: true`.
+          With `force: true` the same Task returns to Claimed with a new Run whose Retry of
+          is the previous Run.
+        - open (queued or running) or finished: the latest Run is reused and the request is
+          recorded as Duplicate, unless `force: true` starts a fresh Task and Run.
+        - Cancelled, Rejected request or none: a fresh Task and Run.
         """
         key = idempotency_key(request, self.clock())
-        existing = None if request.force else self.store.find_task(key)
+        existing = self.store.find_task(key)
         if existing is not None and existing.status in RETRYABLE_TASK_STATUSES:
-            self._requests[existing.id] = request
-            return self.retry(existing.id)
-        if existing is not None and existing.status not in CLOSED_REQUEST_STATUSES:
-            duplicate = self.store.create_task(
-                status="Requested", latest_run=existing.latest_run, duplicate_of=existing.id,
-                **self._task_values(request, key),
-            )
-            self.store.update_task(duplicate.id, status="Duplicate")
+            if request.force:
+                self._requests[existing.id] = request
+                return self.retry(existing.id)
+            self._record_duplicate(request, key, existing)
+            return Submission(existing, self.store.runs[existing.latest_run], needs_force=True)
+        if existing is not None and not request.force and existing.status not in CLOSED_REQUEST_STATUSES:
+            self._record_duplicate(request, key, existing)
             return Submission(existing, self.store.runs[existing.latest_run], reused=True)
         task = self.store.create_task(status="Requested", **self._task_values(request, key))
         run = self.store.create_run(task=task.id, status="queued", mode=request.mode)
@@ -288,7 +293,15 @@ class Orchestrator:
         self._requests[task.id] = request
         return Submission(task, run)
 
+    def _record_duplicate(self, request: Any, key: str, existing: Task) -> Task:
+        duplicate = self.store.create_task(
+            status="Requested", latest_run=existing.latest_run, duplicate_of=existing.id,
+            **self._task_values(request, key),
+        )
+        return self.store.update_task(duplicate.id, status="Duplicate")
+
     def retry(self, task_id: str) -> Submission:
+        """Return a Failed or Guardrail blocked Task to Claimed with a new Run (Retry of = previous)."""
         task = self.store.tasks[task_id]
         if task.status not in RETRYABLE_TASK_STATUSES:
             raise IllegalTransition(f"{task_id} is {task.status!r}; only Failed or Guardrail blocked Tasks retry")
@@ -296,7 +309,7 @@ class Orchestrator:
             task=task_id, status="queued", mode=task.mode, retry_of=task.latest_run,
         )
         task = self.store.update_task(
-            task_id, status="Requested", runs=(*task.runs, run.id), latest_run=run.id,
+            task_id, status="Claimed", runs=(*task.runs, run.id), latest_run=run.id,
         )
         return Submission(task, run, retried=True)
 
@@ -308,14 +321,16 @@ class Orchestrator:
         return self.store.update_task(task_id, status="Cancelled")
 
     def execute(self, task_id: str) -> Task:
-        """Walk a Requested Task through the pipeline until Needs review or a stop state."""
+        """Walk a Requested (or retried, Claimed) Task through the pipeline until Needs review or a stop state."""
         task = self.store.tasks[task_id]
-        check_transition("task", task.status, "Claimed")
+        if task.status != "Claimed":
+            check_transition("task", task.status, "Claimed")
         run = self.store.runs[task.latest_run]
         if run.status != "queued":
             raise IllegalTransition(f"{run.id} is {run.status!r}; only queued Runs execute")
         context = RunContext(self._requests[task_id], task, run)
-        self._task(context, "Claimed")
+        if task.status != "Claimed":
+            self._task(context, "Claimed")
         self._run(context, status="running", started=self.clock())
         try:
             self._task(context, "Collecting evidence")

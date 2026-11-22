@@ -35,7 +35,8 @@ def main(argv=None):
     task = orchestrator.execute(submission.task.id)
     if args.duplicate:
         again = orchestrator.submit(request)
-        print(f"duplicate: reused={again.reused} run={again.run.id}")
+        print(f"duplicate: reused={again.reused} run={again.run.id}"
+              + ("; resubmit with force: true to retry" if again.needs_force else ""))
     for line in store.transcript():
         print(line)
     run = store.runs[task.latest_run]

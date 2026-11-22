@@ -156,16 +156,18 @@ any other write raises `IllegalTransition`. The happy path is Requested →
 Claimed → Collecting evidence → Drafting → Rendering → Checking → Needs review.
 
 - **Idempotency key:** `domain|Israel date|trigger|Musy message_id` (`-` without
-  a Musy lead; `www.` and case are folded). A repeat request reuses the latest
-  Run of the matching Task and is recorded as a `Duplicate` Task. `force: true`
-  always starts a new Task and Run.
+  a Musy lead; `www.` and case are folded). A repeat request of an open
+  (queued/running) or finished Task reuses its latest Run and is recorded as a
+  `Duplicate` Task; `force: true` starts a new Task and Run instead.
 - **Fix loop:** a failed lint sends the Task back to Drafting with the failing
   findings. After 2 fix attempts the Run ends `guardrail_blocked` and the Task
   `Guardrail blocked`. A step exception ends the Run `failed` and the Task `Failed`.
-- **Retries:** a repeat of a `Failed` or `Guardrail blocked` Task (or
-  `Orchestrator.retry`) queues a new Run with `Retry of` set to the previous Run.
-  Finished Runs (`succeeded`, `guardrail_blocked`, `failed`, `cancelled`) reject
-  every further write.
+- **Retries (LLD §4.1/§4.2):** a repeat of a `Failed` or `Guardrail blocked` Task
+  starts no Run unless it has `force: true`; it is recorded as `Duplicate` and
+  `Submission.needs_force` is set. With `force: true` (or `Orchestrator.retry`)
+  the same Task returns to `Claimed` with a new Run whose `Retry of` is the
+  previous Run. Finished Runs (`succeeded`, `guardrail_blocked`, `failed`,
+  `cancelled`) reject every further write.
 
 `dry-run` uses an in-memory store that logs each Tasks/Runs write with Notion
 property names, and recorded steps: the Lehamim golden `report.md` with a draft
