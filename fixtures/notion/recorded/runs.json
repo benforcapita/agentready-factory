@@ -1,0 +1,157 @@
+{
+  "object": "database",
+  "id": "b6afaaf0-1146-56a8-a3de-ec01ec8df400",
+  "created_time": "2026-11-22T05:00:00.000Z",
+  "last_edited_time": "2026-11-22T05:00:00.000Z",
+  "archived": false,
+  "in_trash": false,
+  "url": "https://www.notion.so/b6afaaf0114656a8a3deec01ec8df400",
+  "public_url": null,
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "Runs",
+        "link": null
+      },
+      "plain_text": "Runs",
+      "href": null
+    }
+  ],
+  "parent": {
+    "type": "page_id",
+    "page_id": "a52b5fc9-8548-55f9-9c1c-7ddbcfacc4b8"
+  },
+  "properties": {
+    "Run ID": {
+      "id": "title",
+      "name": "Run ID",
+      "type": "title",
+      "title": {}
+    },
+    "Task": {
+      "id": "dd15",
+      "name": "Task",
+      "type": "relation",
+      "relation": {
+        "database_id": "cac45c9c-3e6e-5966-819d-ed5576553137",
+        "type": "dual_property",
+        "dual_property": {}
+      }
+    },
+    "State": {
+      "id": "054f",
+      "name": "State",
+      "type": "select",
+      "select": {
+        "options": [
+          {
+            "id": "9bd6a8c4",
+            "name": "queued",
+            "color": "default"
+          },
+          {
+            "id": "eb865f66",
+            "name": "collecting",
+            "color": "gray"
+          },
+          {
+            "id": "2a717464",
+            "name": "drafting",
+            "color": "brown"
+          },
+          {
+            "id": "a5e2f64b",
+            "name": "linting",
+            "color": "orange"
+          },
+          {
+            "id": "7fe84045",
+            "name": "publishing",
+            "color": "yellow"
+          },
+          {
+            "id": "287fdd3e",
+            "name": "needs_review",
+            "color": "green"
+          },
+          {
+            "id": "7e1809bd",
+            "name": "done",
+            "color": "blue"
+          },
+          {
+            "id": "bcccf223",
+            "name": "failed",
+            "color": "purple"
+          },
+          {
+            "id": "8e86faa4",
+            "name": "guardrail_blocked",
+            "color": "pink"
+          }
+        ]
+      }
+    },
+    "Phase": {
+      "id": "c84e",
+      "name": "Phase",
+      "type": "select",
+      "select": {
+        "options": [
+          {
+            "id": "efcb3578",
+            "name": "shadow",
+            "color": "default"
+          },
+          {
+            "id": "553b03c3",
+            "name": "reviewed",
+            "color": "gray"
+          },
+          {
+            "id": "ba0e5f81",
+            "name": "volume",
+            "color": "brown"
+          }
+        ]
+      }
+    },
+    "Attempts": {
+      "id": "ff12",
+      "name": "Attempts",
+      "type": "number",
+      "number": {
+        "format": "number"
+      }
+    },
+    "Started": {
+      "id": "cd04",
+      "name": "Started",
+      "type": "date",
+      "date": {}
+    },
+    "Finished": {
+      "id": "e5b7",
+      "name": "Finished",
+      "type": "date",
+      "date": {}
+    },
+    "Prompts used": {
+      "id": "8883",
+      "name": "Prompts used",
+      "type": "rich_text",
+      "rich_text": {}
+    },
+    "Artifacts": {
+      "id": "ecf1",
+      "name": "Artifacts",
+      "type": "relation",
+      "relation": {
+        "database_id": "40fd8349-b933-5f93-81f3-a1f9b3c014a2",
+        "type": "dual_property",
+        "dual_property": {}
+      }
+    }
+  }
+}

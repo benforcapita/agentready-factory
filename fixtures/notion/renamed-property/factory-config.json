@@ -1,0 +1,45 @@
+{
+  "object": "page",
+  "id": "cb535f23-c2b2-53ff-b936-2f7c9b38f509",
+  "created_time": "2026-11-22T05:00:00.000Z",
+  "last_edited_time": "2026-11-22T05:00:00.000Z",
+  "archived": false,
+  "in_trash": false,
+  "url": "https://www.notion.so/cb535f23c2b253ffb9362f7c9b38f509",
+  "public_url": null,
+  "parent": {
+    "type": "page_id",
+    "page_id": "a52b5fc9-8548-55f9-9c1c-7ddbcfacc4b8"
+  },
+  "properties": {
+    "title": {
+      "id": "title",
+      "type": "title",
+      "title": [
+        {
+          "type": "text",
+          "text": {
+            "content": "Factory Config",
+            "link": null
+          },
+          "plain_text": "Factory Config",
+          "href": null
+        }
+      ]
+    },
+    "Phase": {
+      "id": "4759",
+      "type": "select",
+      "select": {
+        "id": "opt0",
+        "name": "shadow",
+        "color": "default"
+      }
+    },
+    "Public scans": {
+      "id": "4f40",
+      "type": "checkbox",
+      "checkbox": false
+    }
+  }
+}

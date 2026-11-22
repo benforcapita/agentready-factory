@@ -1,0 +1,89 @@
+{
+  "object": "database",
+  "id": "a270ce49-d16f-5a46-a35f-85ae5eda2156",
+  "created_time": "2026-11-22T05:00:00.000Z",
+  "last_edited_time": "2026-11-22T05:00:00.000Z",
+  "archived": false,
+  "in_trash": false,
+  "url": "https://www.notion.so/a270ce49d16f5a46a35f85ae5eda2156",
+  "public_url": null,
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "Artifacts",
+        "link": null
+      },
+      "plain_text": "Artifacts",
+      "href": null
+    }
+  ],
+  "parent": {
+    "type": "page_id",
+    "page_id": "a52b5fc9-8548-55f9-9c1c-7ddbcfacc4b8"
+  },
+  "properties": {
+    "Name": {
+      "id": "title",
+      "name": "Name",
+      "type": "title",
+      "title": {}
+    },
+    "Run": {
+      "id": "8d7c",
+      "name": "Run",
+      "type": "relation",
+      "relation": {
+        "database_id": "e5304569-efdd-5b46-bc05-bc2802df6daf",
+        "type": "dual_property",
+        "dual_property": {}
+      }
+    },
+    "Kind": {
+      "id": "02b0",
+      "name": "Kind",
+      "type": "select",
+      "select": {
+        "options": [
+          {
+            "id": "80aab84d",
+            "name": "report.md",
+            "color": "default"
+          },
+          {
+            "id": "2900dab0",
+            "name": "report.html",
+            "color": "gray"
+          },
+          {
+            "id": "0d7ab232",
+            "name": "report.pdf",
+            "color": "brown"
+          },
+          {
+            "id": "7381d092",
+            "name": "notes-for-ben.md",
+            "color": "orange"
+          },
+          {
+            "id": "3b50270d",
+            "name": "evidence",
+            "color": "yellow"
+          }
+        ]
+      }
+    },
+    "Drive file": {
+      "id": "aeae",
+      "name": "Drive file",
+      "type": "url",
+      "url": {}
+    },
+    "SHA-256": {
+      "id": "563e",
+      "name": "SHA-256",
+      "type": "rich_text",
+      "rich_text": {}
+    }
+  }
+}

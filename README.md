@@ -1,8 +1,9 @@
 # agentready-factory
 
 Command-line tools for the AgentReady report factory. `arf validate` reads a
-request YAML file. `arf collect` collects passive HTTP evidence. The `scaffold`,
-`render`, `lint`, `notion`, and `replay` commands are placeholders.
+request YAML file. `arf collect` collects passive HTTP evidence. `arf notion check-schema` checks
+Notion schemas. The `scaffold`, `render`, `lint`, and `replay` commands are
+placeholders.
 
 ## Setup
 
@@ -83,3 +84,25 @@ policy remains pending CTO/Engineering Lead decision.
 See [collect details](src/arf/collect/README.md) for configuration, guard rules
 and offline sample generation; the [sample bundle](fixtures/collect/sample/)
 uses only a local test server.
+
+## Notion
+
+```sh
+arf notion check-schema fixtures/notion/recorded
+```
+
+The Factories hub page, the Tasks, Runs and Artifacts databases and the Factory
+Config page are defined in code in `src/arf/notion/schemas.py` (LLD §3). The
+schema there is provisional until LLD §3 is copied into Linear (PRO-510).
+
+`check-schema` reads a directory of recorded Notion API responses, one
+`<key>.json` per object (`factories-hub`, `tasks`, `runs`, `artifacts`,
+`factory-config`): the body of a retrieve-database or retrieve-page call against
+a test copy. Every property in code must exist with the same name and type, and
+database select properties must offer every listed option. Extra properties are
+allowed. Each problem names the object and property; the command exits 1 when any
+check fails. It makes no Notion calls, needs no token, and never creates or
+changes a database.
+
+`fixtures/notion/recorded` passes. `fixtures/notion/renamed-property` is the same
+copy with the Runs `State` property renamed to `Run state` and fails.
