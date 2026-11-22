@@ -45,7 +45,7 @@ class CheckSchemaTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(stdout, "")
         self.assertIn("FAIL  Runs", stderr)
-        self.assertIn("Runs: missing property 'State' (select)", stderr)
+        self.assertIn("Runs: missing property 'Status' (select)", stderr)
         self.assertIn("Schema check failed", stderr)
         self.assertNotIn("FAIL  Tasks", stderr)
 
@@ -59,13 +59,56 @@ class CheckSchemaTests(unittest.TestCase):
 
     def test_missing_select_option_is_reported(self):
         response = load("runs")
-        options = response["properties"]["State"]["select"]["options"]
-        response["properties"]["State"]["select"]["options"] = [
+        options = response["properties"]["Status"]["select"]["options"]
+        response["properties"]["Status"]["select"]["options"] = [
             option for option in options if option["name"] != "guardrail_blocked"
         ]
         self.assertEqual(
             check_object(schema("runs"), response),
-            ["Runs: property 'State' is missing option 'guardrail_blocked'"],
+            ["Runs: property 'Status' is missing option 'guardrail_blocked'"],
+        )
+
+    def test_missing_task_status_option_is_reported(self):
+        response = load("tasks")
+        status = response["properties"]["Status"]["status"]
+        status["options"] = [o for o in status["options"] if o["name"] != "Needs review"]
+        self.assertEqual(
+            check_object(schema("tasks"), response),
+            ["Tasks: property 'Status' is missing option 'Needs review'"],
+        )
+
+    def test_relation_to_wrong_database_is_reported(self):
+        ids = {key: load(key)["id"] for key in ("tasks", "runs", "artifacts", "factory-page")}
+        response = load("runs")
+        response["properties"]["Task"]["relation"]["database_id"] = ids["artifacts"]
+        self.assertEqual(
+            check_object(schema("runs"), response, ids),
+            ["Runs: relation 'Task' does not point to tasks"],
+        )
+
+    def test_wrong_parent_and_title_are_reported(self):
+        ids = {"factory-page": load("factory-page")["id"]}
+        response = load("artifacts")
+        response["parent"]["page_id"] = load("factories-hub")["id"]
+        response["title"][0]["plain_text"] = "Artifacts (copy)"
+        self.assertEqual(
+            check_object(schema("artifacts"), response, ids),
+            [
+                "Artifacts: title is 'Artifacts (copy)'",
+                "Artifacts: parent is not the factory-page page",
+            ],
+        )
+
+    def test_missing_factory_config_field_is_reported(self):
+        response = load("factory-config-table")
+        response["results"] = [
+            row
+            for row in response["results"]
+            if row["table_row"]["cells"][0][0]["plain_text"] != "Daily run cap"
+        ]
+        self.assertEqual(
+            check_object(schema("factory-config-table"), response),
+            ["Factory Config table: missing field 'Daily run cap'"],
         )
 
     def test_extra_properties_are_allowed(self):

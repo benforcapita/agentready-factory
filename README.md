@@ -91,18 +91,26 @@ uses only a local test server.
 arf notion check-schema fixtures/notion/recorded
 ```
 
-The Factories hub page, the Tasks, Runs and Artifacts databases and the Factory
-Config page are defined in code in `src/arf/notion/schemas.py` (LLD §3). The
-schema there is provisional until LLD §3 is copied into Linear (PRO-510).
+The [LLD §3](https://docs.google.com/document/d/1pzluCsi12dcVTe8pNHDndXz6k08B6rA_LNhlYXbi17Q/edit)
+data model is defined in code in `src/arf/notion/schemas.py`: the `🏭 Factories`
+hub page, the `AgentReady Report Factory` page under it, the Tasks, Runs and
+Artifacts databases, and the Factory Config page with its properties table. Task
+`Status` options come from LLD §4.1.
 
-`check-schema` reads a directory of recorded Notion API responses, one
-`<key>.json` per object (`factories-hub`, `tasks`, `runs`, `artifacts`,
-`factory-config`): the body of a retrieve-database or retrieve-page call against
-a test copy. Every property in code must exist with the same name and type, and
-database select properties must offer every listed option. Extra properties are
-allowed. Each problem names the object and property; the command exits 1 when any
-check fails. It makes no Notion calls, needs no token, and never creates or
-changes a database.
+`check-schema` reads a directory of recorded Notion API responses from a test
+copy, one `<key>.json` per object: `factories-hub`, `factory-page`,
+`factory-config` (retrieve page), `tasks`, `runs`, `artifacts` (retrieve
+database) and `factory-config-table` (the table's block children). It checks
+titles and parent pages; that every property in code exists with the same name
+and type; that select and status properties offer every listed option; and that
+relations point to the right database. Extra properties are allowed. Each
+problem names the object and property, and the command exits 1 when any check
+fails. It makes no Notion calls, needs no token, and never creates or changes a
+database.
+
+Not checked: the Prompt Versions relation target (PRO-404's database), the
+single-row limit on `Latest run`, Factory Config value types (§3.4 gives none),
+and `Requested by` options beyond `ben` (§3.1 says "bot slugs + ben").
 
 `fixtures/notion/recorded` passes. `fixtures/notion/renamed-property` is the same
-copy with the Runs `State` property renamed to `Run state` and fails.
+copy with the Runs `Status` property renamed to `Run status` and fails.

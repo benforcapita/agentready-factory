@@ -1,0 +1,681 @@
+{
+  "object": "list",
+  "results": [
+    {
+      "object": "block",
+      "id": "0725bc8f-a778-59b8-80d1-52337d35b305",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Field",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Field",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Value",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Value",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "5cee53ee-21ea-53d8-9b90-5cc85379f4b1",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Phase",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Phase",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "shadow",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "shadow",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "d6f0502b-6532-50d3-88b4-28a7236e3da0",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Daily run cap",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Daily run cap",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "dbfc9299-0eb1-573b-b5bd-637f2dbedbc1",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Max concurrent runs",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Max concurrent runs",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "1",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "1",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "5e31fe28-1992-5afb-8140-00e0a558535a",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Probe identities",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Probe identities",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "3f8531cf-739a-5115-a619-d864579ab7db",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Probe paths",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Probe paths",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "a4c06a4d-c6c5-5bbd-9e82-bad5e60806b7",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Request timeout",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Request timeout",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "5663efee-8af1-5f10-904f-fcde2aaa77b7",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Contact line",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Contact line",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "e8ef7123-e92d-5df1-89d6-1c7b324b9a03",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Prepared-by line",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Prepared-by line",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "5c517635-2c37-5e86-9277-09a500a3436a",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Banned phrases",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Banned phrases",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "(set by Ben)",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "(set by Ben)",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "42be3657-717e-502f-a2f1-93c1e57b9fe2",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Allowed readers",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Allowed readers",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "TinyFish, Jina",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "TinyFish, Jina",
+              "href": null
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "object": "block",
+      "id": "707f8db9-d5a2-542d-adc5-37dd120826b8",
+      "parent": {
+        "type": "block_id",
+        "block_id": "5dbb68c4-1310-52a8-8b98-7677e09d1e4b"
+      },
+      "created_time": "2026-11-22T05:00:00.000Z",
+      "last_edited_time": "2026-11-22T05:00:00.000Z",
+      "has_children": false,
+      "archived": false,
+      "in_trash": false,
+      "type": "table_row",
+      "table_row": {
+        "cells": [
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "Public-scan policy",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "Public-scan policy",
+              "href": null
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "text": {
+                "content": "off unless the request quotes Ben's OK for that run",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "off unless the request quotes Ben's OK for that run",
+              "href": null
+            }
+          ]
+        ]
+      }
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "type": "block",
+  "block": {}
+}
