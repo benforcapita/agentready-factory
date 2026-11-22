@@ -17,5 +17,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install PDF system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core fonts-liberation2
       - run: python -m pip install .
       - run: python -m unittest discover -v
+      - name: Render Lehamim golden and check HTML/PDF
+        run: |
+          python -m arf.render fixtures/golden/lehamim/report.md --out out/golden \
+            --title "דוח AgentReady — מאפיית לחמים" --final
+          diff -u fixtures/golden/lehamim/report.html out/golden/report.html
+          echo "golden HTML: identical to fixtures/golden/lehamim/report.html"
+          python -m arf.render fixtures/golden/lehamim/report.md --out out/shadow --run-id ci-shadow
+          grep -q "<!-- arf:draft run=ci-shadow -->" out/shadow/report.html
+          for pdf in out/golden/report.pdf out/shadow/report.pdf; do
+            echo "== $pdf"
+            pdfinfo "$pdf"
+            pdffonts "$pdf"
+            pdfinfo "$pdf" | grep -qE 'Page size:.*\(A4\)'
+            pages=$(pdfinfo "$pdf" | awk '/^Pages:/{print $2}')
+            if [ "$pages" -lt 2 ] || [ "$pages" -gt 4 ]; then echo "expected 2-4 pages, got $pages"; exit 1; fi
+            if pdffonts "$pdf" | tail -n +3 | awk '{print $(NF-4)}' | grep -qv '^yes$'; then echo "font not embedded"; exit 1; fi
+            pdftotext "$pdf" - | grep -q "תקציר מנהלים"
+          done
+          pdftotext out/shadow/report.pdf - | grep -q "לא לשליחה"
+          if pdftotext out/golden/report.pdf - | grep -q "DRAFT"; then echo "marker present with --final"; exit 1; fi
+          echo "PDF checks passed"
