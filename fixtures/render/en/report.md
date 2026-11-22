@@ -1,3 +1,4 @@
+<!-- arf:draft run=fixture-en -->
 # AI Agent Readiness Report (AgentReady) — Example Bakery
 
 **Prepared for:** Example Bakery — [CONTACT_NAME], Marketing Director

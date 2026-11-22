@@ -9,7 +9,7 @@ import sys
 from tempfile import TemporaryDirectory
 import unittest
 
-from arf.render import DRAFT_MARKER, BlockedResource, render_html, render_pdf
+from arf.render import DRAFT_MARKER, BlockedResource, draft_comment, render_html, render_pdf
 from arf.render.__main__ import main
 
 
@@ -45,7 +45,7 @@ class HtmlTests(RenderCommand, unittest.TestCase):
 
     def test_golden_html_matches_lehamim_with_marker_off(self):
         code, _, stderr = self.render(
-            GOLDEN / "report.md", "--out", self.out, "--title", GOLDEN_TITLE, "--no-draft-marker", "--no-pdf"
+            GOLDEN / "report.md", "--out", self.out, "--title", GOLDEN_TITLE, "--final", "--no-pdf"
         )
         self.assertEqual(code, 0, stderr)
         rendered = (self.out / "report.html").read_text(encoding="utf-8")
@@ -55,11 +55,37 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertFalse((self.out / "report.pdf").exists())
 
     def test_draft_marker_is_on_by_default(self):
-        code, _, stderr = self.render(GOLDEN / "report.md", "--out", self.out, "--no-pdf")
+        code, _, stderr = self.render(GOLDEN / "report.md", "--out", self.out, "--run-id", "run-7", "--no-pdf")
         self.assertEqual(code, 0, stderr)
         rendered = (self.out / "report.html").read_text(encoding="utf-8")
-        self.assertIn(f'<body dir="rtl">\n<div class="draft-marker" role="note">{DRAFT_MARKER}</div>\n<h1>', rendered)
-        self.assertIn(f'@top-center{{content:"{DRAFT_MARKER}"', rendered)
+        self.assertIn('<body dir="rtl">\n<!-- arf:draft run=run-7 -->\n<h1>', rendered)
+        self.assertIn(f'<footer class="draft-marker" role="note">{DRAFT_MARKER}</footer>\n</body>', rendered)
+        self.assertIn(f'@bottom-center{{content:"{DRAFT_MARKER}"', rendered)
+        self.assertEqual(rendered.count("arf:draft"), 1)
+
+    def test_run_id_is_read_from_the_report_comment(self):
+        rendered = render_html("<!-- arf:draft run=2026-11-22T07:40_lehamim -->\n# x\n", lang="en")
+        self.assertIn("<!-- arf:draft run=2026-11-22T07:40_lehamim -->", rendered)
+        self.assertEqual(rendered.count("arf:draft"), 1)
+        same = render_html("<!-- arf:draft run=a1 -->\n# x\n", lang="en", run_id="a1")
+        self.assertEqual(same.count("arf:draft run=a1"), 1)
+
+    def test_draft_requires_one_valid_run_id(self):
+        code, _, stderr = self.render(GOLDEN / "report.md", "--out", self.out, "--no-pdf")
+        self.assertEqual(code, 1)
+        self.assertIn("needs a run id", stderr)
+        self.assertFalse((self.out / "report.html").exists())
+        with self.assertRaisesRegex(ValueError, "conflicting"):
+            render_html("<!-- arf:draft run=a1 -->\n# x\n", run_id="b2")
+        for bad in ("", "a b", "x-->", "-x"):
+            with self.assertRaisesRegex(ValueError, "invalid run id"):
+                draft_comment(bad)
+        self.assertEqual(draft_comment("r1"), "<!-- arf:draft run=r1 -->")
+
+    def test_final_strips_the_draft_comment(self):
+        rendered = render_html("<!-- arf:draft run=a1 -->\n# x\n", lang="en", draft_marker=False)
+        self.assertNotIn("arf:draft", rendered)
+        self.assertNotIn(DRAFT_MARKER, rendered)
 
     def test_draft_marker_text_is_the_lld_marker(self):
         self.assertEqual(DRAFT_MARKER, "\u05d8\u05d9\u05d5\u05d8\u05d4 \u2014 \u05dc\u05d0 \u05dc\u05e9\u05dc\u05d9\u05d7\u05d4 \u00b7 DRAFT")
@@ -70,7 +96,7 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertNotIn("draft-marker", rendered)
 
     def test_title_defaults_to_first_heading(self):
-        rendered = render_html("# Report for *Acme* & co\n\nBody\n", lang="en")
+        rendered = render_html("# Report for *Acme* & co\n\nBody\n", lang="en", run_id="t")
         self.assertIn("<title>Report for Acme &amp; co</title>", rendered)
 
     def test_hebrew_wraps_latin_runs_but_not_placeholders(self):
@@ -90,11 +116,12 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertIn("text-align:left", rendered)
         self.assertIn('<section class="summary"><h2>Executive summary</h2>', rendered)
         self.assertIn(DRAFT_MARKER, rendered)
+        self.assertIn("<!-- arf:draft run=fixture-en -->", rendered)
         self.assertNotIn('class="en"', rendered.split("<body", 1)[1])
 
     def test_html_has_no_external_resources(self):
         for lang, source in (("he", GOLDEN / "report.md"), ("en", ENGLISH)):
-            rendered = render_html(source.read_text(encoding="utf-8"), lang=lang)
+            rendered = render_html(source.read_text(encoding="utf-8"), lang=lang, run_id="fixture-en")
             self.assertNotRegex(rendered, r"(?i)<(script|img|link|iframe)\b|https?://|url\(")
 
     def test_unsupported_language_is_rejected(self):
@@ -113,7 +140,8 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         result = subprocess.run(
             [sys.executable, "-m", "arf.render", "--help"], capture_output=True, text=True, check=True
         )
-        self.assertIn("--no-draft-marker", result.stdout)
+        self.assertIn("--final", result.stdout)
+        self.assertIn("--run-id", result.stdout)
 
 
 @unittest.skipUnless(POPPLER or os.environ.get("CI"), "poppler-utils not installed")
@@ -150,7 +178,7 @@ class PdfTests(RenderCommand, unittest.TestCase):
         self.assertNotIn("DRAFT", text)
 
     def test_shadow_pdf_carries_the_draft_marker_on_every_page(self):
-        pdf = self.render_pdf_fixture(GOLDEN / "report.md")
+        pdf = self.render_pdf_fixture(GOLDEN / "report.md", "--run-id", "run-7")
         pages = self.text(pdf).split("\f")
         pages = [page for page in pages if page.strip()]
         self.assertGreaterEqual(len(pages), 2)
@@ -165,7 +193,7 @@ class PdfTests(RenderCommand, unittest.TestCase):
 
     def test_external_resources_are_refused(self):
         pdf = self.out / "report.pdf"
-        document = render_html('# x\n\n<img src="https://tracker.example/p.gif">\n', lang="en")
+        document = render_html('# x\n\n<img src="https://tracker.example/p.gif">\n', lang="en", run_id="t")
         with self.assertRaisesRegex(BlockedResource, "tracker.example"):
             render_pdf(document, pdf)
         self.assertFalse(pdf.exists())

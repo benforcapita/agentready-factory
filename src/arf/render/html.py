@@ -27,10 +27,22 @@ strong{color:#0d1b2a}
 """
 
 _MARKER_CSS = (
-    ".draft-marker{border:2px solid #b42318;color:#b42318;background:#fef3f2;font-weight:bold;"
-    "text-align:center;padding:6px 10px;margin:0 0 16px;border-radius:6px}\n"
-    '@page{@top-center{content:"' + DRAFT_MARKER + '";font-family:"Assistant","Rubik","Heebo","Segoe UI",Arial,sans-serif;color:#b42318;font-weight:bold;font-size:11px}}\n'
+    ".draft-marker{border-top:2px solid #b42318;color:#b42318;background:#fef3f2;font-weight:bold;"
+    "text-align:center;padding:6px 10px}\n"
+    "@media screen{body{padding-bottom:56px}.draft-marker{position:fixed;left:0;right:0;bottom:0}}\n"
+    "@media print{.draft-marker{display:none}}\n"
+    '@page{@bottom-center{content:"' + DRAFT_MARKER + '";font-family:"Assistant","Rubik","Heebo","Segoe UI",Arial,sans-serif;color:#b42318;font-weight:bold;font-size:11px}}\n'
 )
+
+_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
+_DRAFT_COMMENT = re.compile(r"<!--\s*arf:draft\s+run=(\S*?)\s*-->\n?")
+
+
+def draft_comment(run_id: str) -> str:
+    """The LLD 6.2 draft comment that marks a shadow/reviewed report.md or report.html."""
+    if not _RUN_ID.fullmatch(run_id or ""):
+        raise ValueError(f"invalid run id {run_id!r}; use letters, digits and . _ : -")
+    return f"<!-- arf:draft run={run_id} -->"
 
 
 @dataclass(frozen=True)
@@ -93,13 +105,30 @@ def render_html(
     lang: str = "he",
     title: str | None = None,
     draft_marker: bool = True,
+    run_id: str | None = None,
 ) -> str:
-    """Render report Markdown to a standalone HTML document with no external resources."""
+    """Render report Markdown to a standalone HTML document with no external resources.
+
+    Drafts (the default) carry the LLD 6.2 marker: the comment `<!-- arf:draft run=<id> -->`
+    and the footer line DRAFT_MARKER on screen and on every PDF page. The run id comes from
+    `run_id` or from the comment already in report.md. `draft_marker=False` is `--final`.
+    """
     if lang not in LANGUAGES:
         raise ValueError(f"unsupported language {lang!r}; expected one of {', '.join(LANGUAGES)}")
     language = LANGUAGES[lang]
 
     source = source.replace("\u200e", "").replace("\u200f", "")
+    source_runs = set(_DRAFT_COMMENT.findall(source))
+    source = _DRAFT_COMMENT.sub("", source)
+    comment = ""
+    if draft_marker:
+        if len(source_runs) > 1 or (run_id and source_runs and source_runs != {run_id}):
+            runs = ", ".join(sorted(source_runs | ({run_id} if run_id else set())))
+            raise ValueError(f"conflicting arf:draft run ids: {runs}")
+        run_id = run_id or next(iter(source_runs), None)
+        if not run_id:
+            raise ValueError("a draft needs a run id: pass --run-id or keep <!-- arf:draft run=<id> --> in report.md")
+        comment = draft_comment(run_id) + "\n"
     body = markdown.markdown(source, extensions=["tables", "nl2br"])
     if language.wrap_latin:
         body = "".join(part if part.startswith("<") else _wrap_latin_runs(part) for part in _TAG.split(body))
@@ -115,7 +144,7 @@ def render_html(
     css = _BASE_CSS.replace("ALIGN", language.align)
     if draft_marker:
         css += _MARKER_CSS
-        body = f'<div class="draft-marker" role="note">{DRAFT_MARKER}</div>\n{body}'
+        body = f'{comment}{body}\n<footer class="draft-marker" role="note">{DRAFT_MARKER}</footer>'
     if title is None:
         title = _first_heading(body)
     direction = language.direction

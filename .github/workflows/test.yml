@@ -26,10 +26,11 @@ jobs:
       - name: Render Lehamim golden and check HTML/PDF
         run: |
           python -m arf.render fixtures/golden/lehamim/report.md --out out/golden \
-            --title "דוח AgentReady — מאפיית לחמים" --no-draft-marker
+            --title "דוח AgentReady — מאפיית לחמים" --final
           diff -u fixtures/golden/lehamim/report.html out/golden/report.html
           echo "golden HTML: identical to fixtures/golden/lehamim/report.html"
-          python -m arf.render fixtures/golden/lehamim/report.md --out out/shadow
+          python -m arf.render fixtures/golden/lehamim/report.md --out out/shadow --run-id ci-shadow
+          grep -q "<!-- arf:draft run=ci-shadow -->" out/shadow/report.html
           for pdf in out/golden/report.pdf out/shadow/report.pdf; do
             echo "== $pdf"
             pdfinfo "$pdf"
@@ -41,5 +42,5 @@ jobs:
             pdftotext "$pdf" - | grep -q "תקציר מנהלים"
           done
           pdftotext out/shadow/report.pdf - | grep -q "לא לשליחה"
-          if pdftotext out/golden/report.pdf - | grep -q "DRAFT"; then echo "marker present with --no-draft-marker"; exit 1; fi
+          if pdftotext out/golden/report.pdf - | grep -q "DRAFT"; then echo "marker present with --final"; exit 1; fi
           echo "PDF checks passed"
