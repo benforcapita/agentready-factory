@@ -13,6 +13,7 @@ STEPS = ("analyze", "write-report", "write-notes", "judge")
 STATUSES = ("testing", "production", "retired")
 FACTORY = "AgentReady report factory"
 PAGE_ID = re.compile(r"([0-9a-f]{32})(?:[?#].*)?$")
+ROW_ID = re.compile(r"[0-9a-f]{32}")
 
 
 class PromptSelectionError(ValueError):
@@ -91,7 +92,28 @@ class RecordedPromptVersions:
         except (OSError, ValueError) as error:
             raise PromptSelectionError(f"could not read recorded Prompt Versions response {name}: {error}") from None
 
+    def _row_id(self, page: dict) -> str:
+        """The row's Notion page id, checked before it is used as a file name."""
+        raw = page.get("id")
+        if not isinstance(raw, str):
+            raise PromptSelectionError(f"recorded Prompt Versions row {raw!r}: id is not a string")
+        if ".." in raw or "/" in raw or "\\" in raw or Path(raw).is_absolute():
+            raise PromptSelectionError(f"recorded Prompt Versions row {raw!r}: id is a path, not a Notion page id")
+        id_ = raw.replace("-", "").lower()
+        if not ROW_ID.fullmatch(id_):
+            raise PromptSelectionError(f"recorded Prompt Versions row {raw!r}: id is not a 32-hex Notion page id")
+        url = page.get("url")
+        if not isinstance(url, str) or not PAGE_ID.search(url.replace("-", "").lower()):
+            raise PromptSelectionError(f"recorded Prompt Versions row {raw!r}: url {url!r} has no Notion page id")
+        if page_id(url) != id_:
+            raise PromptSelectionError(f"recorded Prompt Versions row {raw!r}: id does not match the page id in {url}")
+        return id_
+
     def _body(self, page_id_: str) -> str:
+        blocks_dir = (self.root / "blocks").resolve()
+        path = (blocks_dir / f"{page_id_}.json").resolve()
+        if not path.is_relative_to(blocks_dir):
+            raise PromptSelectionError(f"recorded prompt body for {page_id_} resolves outside blocks/: {path}")
         blocks = self._load(Path("blocks") / f"{page_id_}.json")
         if blocks.get("has_more"):
             raise PromptSelectionError(f"recorded prompt body for {page_id_} is incomplete (has_more)")
@@ -106,9 +128,9 @@ class RecordedPromptVersions:
             query = self._load(Path("query.json"))
             if query.get("has_more"):
                 raise PromptSelectionError("recorded Prompt Versions query is incomplete (has_more)")
+            pages = [(self._row_id(page), page) for page in query.get("results", [])]
             rows = {}
-            for page in query.get("results", []):
-                id_ = page["id"].replace("-", "").lower()
+            for id_, page in pages:
                 rows[id_] = PromptVersion(
                     page_id=id_,
                     url=page["url"],

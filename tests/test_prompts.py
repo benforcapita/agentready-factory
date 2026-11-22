@@ -1,5 +1,7 @@
 import hashlib
 import json
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
@@ -16,6 +18,7 @@ from arf.prompts import (
     select_prompts,
     write_prompts_used,
 )
+from arf.scaffold.__main__ import main as scaffold_main
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +133,81 @@ class SelectionTest(unittest.TestCase):
         ]
         selected = select_prompts(MemoryReader(rows))
         self.assertEqual(selected["analyze"].prompt.sha256, hashlib.sha256("analyze שלום\n".encode()).hexdigest())
+
+
+JUDGE_PRODUCTION = "3d899112-fe69-5e24-98ab-7e675915c3fc"
+REQUEST_HE = ROOT / "fixtures" / "scaffold" / "request-he.yaml"
+
+
+class RecordedRowIdTest(unittest.TestCase):
+    """QA N2: a recorded row id is a Notion page id, never a path."""
+
+    def setUp(self):
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.tmp = Path(self.directory.name)
+        self.root = self.tmp / "bundle" / "prompts"
+        shutil.copytree(PROMPTS / "recorded", self.root)
+        self.evil = self.tmp / "bundle" / "outside" / "evil.json"
+        self.evil.parent.mkdir(parents=True)
+        self.evil.write_text(json.dumps({"results": [{"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": "EVIL"}]}}]}))
+
+    def set_judge_id(self, row_id):
+        query_path = self.root / "query.json"
+        query = json.loads(query_path.read_text())
+        for page in query["results"]:
+            if page["id"] == JUDGE_PRODUCTION:
+                page["id"] = row_id
+        query_path.write_text(json.dumps(query))
+
+    def run_scaffold(self):
+        out = self.tmp / "run"
+        stdout, stderr = StringIO(), StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = scaffold_main([str(REQUEST_HE), "--out", str(out), "--run-id", "n2", "--prompts", str(self.root)])
+        return code, stderr.getvalue(), out
+
+    def assert_rejected(self, row_id, reason):
+        self.set_judge_id(row_id)
+        with self.assertRaisesRegex(PromptSelectionError, reason) as caught:
+            select_prompts(RecordedPromptVersions(self.root))
+        self.assertIn(repr(row_id), str(caught.exception))
+        code, stderr, out = self.run_scaffold()
+        self.assertEqual(code, 1)
+        self.assertIn("PromptSelectionError", stderr)
+        self.assertIn(reason, stderr)
+        self.assertFalse(out.exists())
+
+    def test_dot_dot_traversal_id(self):
+        self.assert_rejected("../../outside/evil", "id is a path")
+
+    def test_absolute_path_id(self):
+        self.assert_rejected(str(self.evil.with_suffix("")), "id is a path")
+
+    def test_backslash_path_id(self):
+        self.assert_rejected("..\\..\\outside\\evil", "id is a path")
+
+    def test_non_hex_id(self):
+        self.assert_rejected("3d899112-fe69-5e24-98ab-7e675915c3fz", "not a 32-hex Notion page id")
+
+    def test_id_that_differs_from_url_page_id(self):
+        self.assert_rejected("87a7bb45-5ee9-5e3a-af02-785aa2b5c598", "does not match the page id")
+
+    def test_out_of_tree_symlink(self):
+        block = self.root / "blocks" / "3d899112fe695e2498ab7e675915c3fc.json"
+        block.unlink()
+        block.symlink_to(self.evil)
+        with self.assertRaisesRegex(PromptSelectionError, "resolves outside blocks/"):
+            select_prompts(RecordedPromptVersions(self.root))
+        code, stderr, out = self.run_scaffold()
+        self.assertEqual(code, 1)
+        self.assertIn("resolves outside blocks/", stderr)
+        self.assertFalse(out.exists())
+
+    def test_dashed_and_undashed_ids_are_accepted(self):
+        self.set_judge_id(JUDGE_PRODUCTION.replace("-", ""))
+        selected = select_prompts(RecordedPromptVersions(self.root))
+        self.assertEqual(selected["judge"].prompt.page_id, "3d899112fe695e2498ab7e675915c3fc")
 
 
 class PromptsUsedTest(unittest.TestCase):
