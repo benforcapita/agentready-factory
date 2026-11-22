@@ -61,7 +61,7 @@ LANGUAGES = {
 _TOKEN = r"[A-Za-z0-9./@:_+\-~'\"?=&%#]*[A-Za-z][A-Za-z0-9./@:_+\-~?=&%#]*"
 _LATIN_RUN = re.compile(r"(?:/?" + _TOKEN + r")(?:[ ,/&<>]+(?:/?" + _TOKEN + r"))*|/|0\d{2}-\d{3}-\d{4}")
 _PLACEHOLDER = re.compile(r"[A-Z][A-Z0-9_]*")
-_TAG = re.compile(r"(<[^>]+>)")
+_TAG = re.compile(r"(<!--.*?-->|<[^>]+>)", re.S)
 
 
 def _wrap_latin_runs(escaped: str) -> str:

@@ -115,6 +115,16 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertNotRegex(rendered, r"&(amp|lt|gt)</span>|</span>;|&amp;amp;")
         self.assertNotIn('class="en">amp<', rendered)
 
+    def test_hebrew_html_comments_with_gt_do_not_swallow_the_report(self):
+        source = "# בדיקה\n\n<!-- note: score > 3 -->\n\n<!-- source: A -> B -->\n\nפסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n"
+        rendered = render_html(source, draft_marker=False)
+        self.assertIn("<!-- note: score > 3 -->", rendered)
+        self.assertIn("<!-- source: A -> B -->", rendered)
+        self.assertNotIn("--&gt;", rendered)
+        self.assertIn('פסקה חשובה <span dir="ltr" class="en">ABC</span> אחרי ההערה', rendered)
+        self.assertIn("<h2>סעיף נוסף</h2>", rendered)
+        self.assertIn("עוד טקסט", rendered)
+
     def test_english_is_ltr_without_latin_wrapping(self):
         code, _, stderr = self.render(ENGLISH, "--out", self.out, "--lang", "en", "--no-pdf")
         self.assertEqual(code, 0, stderr)
@@ -205,6 +215,13 @@ class PdfTests(RenderCommand, unittest.TestCase):
         source.write_text(ENTITY_REPORT, encoding="utf-8")
         text = self.text(self.render_pdf_fixture(source, "--lang", "he", "--final"))
         for phrase in ENTITY_TEXTS:
+            self.assertIn(phrase, text)
+
+    def test_hebrew_pdf_renders_content_after_html_comments_with_gt(self):
+        source = self.out / "comment.md"
+        source.write_text("# בדיקה\n\n<!-- source: A -> B -->\n\nפסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n", encoding="utf-8")
+        text = self.text(self.render_pdf_fixture(source, "--lang", "he", "--final"))
+        for phrase in ("פסקה חשובה", "ABC", "סעיף נוסף", "עוד טקסט"):
             self.assertIn(phrase, text)
 
     def test_external_resources_are_refused(self):
