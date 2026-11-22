@@ -1,0 +1,468 @@
+{
+  "page_count": 5,
+  "types": [
+    "BreadcrumbList",
+    "CollectionPage",
+    "ImageObject",
+    "ListItem",
+    "ReadAction",
+    "WebPage",
+    "WebSite"
+  ],
+  "pages_without_jsonld": [],
+  "pages": [
+    {
+      "source": "jina_branch.html",
+      "url": "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/",
+      "block_count": 1,
+      "top_level_types": [
+        "WebPage",
+        "BreadcrumbList",
+        "WebSite"
+      ],
+      "types": [
+        "BreadcrumbList",
+        "ListItem",
+        "ReadAction",
+        "WebPage",
+        "WebSite"
+      ],
+      "errors": [],
+      "blocks": [
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              "@id": "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/",
+              "url": "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/",
+              "name": "חנות דיזנגוף - מאפיית לחמים",
+              "isPartOf": {
+                "@id": "https://www.lehamim.co.il/#website"
+              },
+              "datePublished": "2022-04-11T11:25:30+00:00",
+              "dateModified": "2026-06-09T05:20:52+00:00",
+              "breadcrumb": {
+                "@id": "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/#breadcrumb"
+              },
+              "inLanguage": "he-IL",
+              "potentialAction": [
+                {
+                  "@type": "ReadAction",
+                  "target": [
+                    "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/"
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "BreadcrumbList",
+              "@id": "https://www.lehamim.co.il/branch/%d7%97%d7%a0%d7%95%d7%aa-%d7%93%d7%99%d7%96%d7%a0%d7%92%d7%95%d7%a3/#breadcrumb",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "ראשי",
+                  "item": "https://www.lehamim.co.il/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 2,
+                  "name": "סניפים",
+                  "item": "https://www.lehamim.co.il/branch/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 3,
+                  "name": "חנות דיזנגוף"
+                }
+              ]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.lehamim.co.il/#website",
+              "url": "https://www.lehamim.co.il/",
+              "name": "מאפיית לחמים",
+              "description": "מאפיית לחמים",
+              "inLanguage": "he-IL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "jina_home.html",
+      "url": "https://www.lehamim.co.il/",
+      "block_count": 1,
+      "top_level_types": [
+        "WebPage",
+        "ImageObject",
+        "BreadcrumbList",
+        "WebSite"
+      ],
+      "types": [
+        "BreadcrumbList",
+        "ImageObject",
+        "ListItem",
+        "ReadAction",
+        "WebPage",
+        "WebSite"
+      ],
+      "errors": [],
+      "blocks": [
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              "@id": "https://www.lehamim.co.il/",
+              "url": "https://www.lehamim.co.il/",
+              "name": "עמוד ראשי - מאפיית לחמים",
+              "isPartOf": {
+                "@id": "https://www.lehamim.co.il/#website"
+              },
+              "primaryImageOfPage": {
+                "@id": "https://www.lehamim.co.il/#primaryimage"
+              },
+              "image": {
+                "@id": "https://www.lehamim.co.il/#primaryimage"
+              },
+              "thumbnailUrl": "https://www.lehamim.co.il/wp-content/uploads/sites/34/2024/01/icon_bag.svg",
+              "datePublished": "2024-01-10T13:49:12+00:00",
+              "dateModified": "2026-09-22T06:09:14+00:00",
+              "description": "מאפיית לחמים של אורי שפט – לחמים טריים, עוגות, מאפים ומגשי אירוח הנאפים מדי יום בעבודת יד ובאהבה. הזמינו אונליין במשלוח או באיסוף עצמי. כשר.",
+              "breadcrumb": {
+                "@id": "https://www.lehamim.co.il/#breadcrumb"
+              },
+              "inLanguage": "he-IL",
+              "potentialAction": [
+                {
+                  "@type": "ReadAction",
+                  "target": [
+                    "https://www.lehamim.co.il/"
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "ImageObject",
+              "inLanguage": "he-IL",
+              "@id": "https://www.lehamim.co.il/#primaryimage",
+              "url": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2024/01/11103552/icon_bag.svg",
+              "contentUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2024/01/11103552/icon_bag.svg",
+              "width": 27,
+              "height": 34
+            },
+            {
+              "@type": "BreadcrumbList",
+              "@id": "https://www.lehamim.co.il/#breadcrumb",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "ראשי"
+                }
+              ]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.lehamim.co.il/#website",
+              "url": "https://www.lehamim.co.il/",
+              "name": "מאפיית לחמים",
+              "description": "מאפיית לחמים",
+              "inLanguage": "he-IL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "jina_menucat.html",
+      "url": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/",
+      "block_count": 1,
+      "top_level_types": [
+        "CollectionPage",
+        "ImageObject",
+        "BreadcrumbList",
+        "WebSite"
+      ],
+      "types": [
+        "BreadcrumbList",
+        "CollectionPage",
+        "ImageObject",
+        "ListItem",
+        "WebSite"
+      ],
+      "errors": [],
+      "blocks": [
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/",
+              "url": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/",
+              "name": "מגשי אירוח - מאפיית לחמים",
+              "isPartOf": {
+                "@id": "https://www.lehamim.co.il/#website"
+              },
+              "primaryImageOfPage": {
+                "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/#primaryimage"
+              },
+              "image": {
+                "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/#primaryimage"
+              },
+              "thumbnailUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2020/08/29183248/%D7%9E%D7%92%D7%A9-%D7%9B%D7%A8%D7%99%D7%9B%D7%95%D7%A0%D7%99-%D7%9E%D7%99%D7%A0%D7%99-%D7%91%D7%99%D7%A1-%D7%A9%D7%95%D7%9E%D7%A9%D7%95%D7%9D.jpg",
+              "description": "מחפשים מגשי אירוח חלביים לאירוע? מגוון עשיר של מגשים טריים ומוקפדים, מתאימים למפגשים משפחתיים, אירועים עסקיים ולחגיגות מיוחדות.",
+              "breadcrumb": {
+                "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/#breadcrumb"
+              },
+              "inLanguage": "he-IL"
+            },
+            {
+              "@type": "ImageObject",
+              "inLanguage": "he-IL",
+              "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/#primaryimage",
+              "url": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2020/08/29183248/%D7%9E%D7%92%D7%A9-%D7%9B%D7%A8%D7%99%D7%9B%D7%95%D7%A0%D7%99-%D7%9E%D7%99%D7%A0%D7%99-%D7%91%D7%99%D7%A1-%D7%A9%D7%95%D7%9E%D7%A9%D7%95%D7%9D.jpg",
+              "contentUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2020/08/29183248/%D7%9E%D7%92%D7%A9-%D7%9B%D7%A8%D7%99%D7%9B%D7%95%D7%A0%D7%99-%D7%9E%D7%99%D7%A0%D7%99-%D7%91%D7%99%D7%A1-%D7%A9%D7%95%D7%9E%D7%A9%D7%95%D7%9D.jpg",
+              "width": 2016,
+              "height": 1344
+            },
+            {
+              "@type": "BreadcrumbList",
+              "@id": "https://www.lehamim.co.il/menu-cat/%d7%9e%d7%92%d7%a9%d7%99-%d7%90%d7%99%d7%a8%d7%95%d7%97/#breadcrumb",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "ראשי",
+                  "item": "https://www.lehamim.co.il/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 2,
+                  "name": "המוצרים שלנו",
+                  "item": "https://www.lehamim.co.il/menu/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 3,
+                  "name": "מגשי אירוח"
+                }
+              ]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.lehamim.co.il/#website",
+              "url": "https://www.lehamim.co.il/",
+              "name": "מאפיית לחמים",
+              "description": "מאפיית לחמים",
+              "inLanguage": "he-IL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "jina_product.html",
+      "url": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/",
+      "block_count": 1,
+      "top_level_types": [
+        "WebPage",
+        "ImageObject",
+        "BreadcrumbList",
+        "WebSite"
+      ],
+      "types": [
+        "BreadcrumbList",
+        "ImageObject",
+        "ListItem",
+        "ReadAction",
+        "WebPage",
+        "WebSite"
+      ],
+      "errors": [],
+      "blocks": [
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/",
+              "url": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/",
+              "name": "כריך טוניסאי - מאפיית לחמים",
+              "isPartOf": {
+                "@id": "https://www.lehamim.co.il/#website"
+              },
+              "primaryImageOfPage": {
+                "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/#primaryimage"
+              },
+              "image": {
+                "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/#primaryimage"
+              },
+              "thumbnailUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2024/08/18104436/%D7%9B%D7%A8%D7%99%D7%9A-%D7%98%D7%95%D7%A0%D7%99%D7%A1%D7%90%D7%99.jpg",
+              "datePublished": "2024-08-18T07:47:07+00:00",
+              "dateModified": "2025-03-30T13:53:53+00:00",
+              "breadcrumb": {
+                "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/#breadcrumb"
+              },
+              "inLanguage": "he-IL",
+              "potentialAction": [
+                {
+                  "@type": "ReadAction",
+                  "target": [
+                    "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/"
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "ImageObject",
+              "inLanguage": "he-IL",
+              "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/#primaryimage",
+              "url": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2024/08/18104436/%D7%9B%D7%A8%D7%99%D7%9A-%D7%98%D7%95%D7%A0%D7%99%D7%A1%D7%90%D7%99.jpg",
+              "contentUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2024/08/18104436/%D7%9B%D7%A8%D7%99%D7%9A-%D7%98%D7%95%D7%A0%D7%99%D7%A1%D7%90%D7%99.jpg",
+              "width": 768,
+              "height": 512,
+              "caption": "כריך טוניסאי מונח על גבי קרש חיתוך"
+            },
+            {
+              "@type": "BreadcrumbList",
+              "@id": "https://www.lehamim.co.il/menu/%d7%9b%d7%a8%d7%99%d7%9a-%d7%98%d7%95%d7%a0%d7%99%d7%a1%d7%90%d7%99/#breadcrumb",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "ראשי",
+                  "item": "https://www.lehamim.co.il/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 2,
+                  "name": "המוצרים שלנו",
+                  "item": "https://www.lehamim.co.il/menu/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 3,
+                  "name": "כריכים וסלטים",
+                  "item": "https://www.lehamim.co.il/menu-cat/%d7%9b%d7%a8%d7%99%d7%9b%d7%99%d7%9d-%d7%95%d7%a1%d7%9c%d7%98%d7%99%d7%9d/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 4,
+                  "name": "כריכים",
+                  "item": "https://www.lehamim.co.il/menu-cat/%d7%9b%d7%a8%d7%99%d7%9b%d7%99%d7%9d/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 5,
+                  "name": "כריך טוניסאי"
+                }
+              ]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.lehamim.co.il/#website",
+              "url": "https://www.lehamim.co.il/",
+              "name": "מאפיית לחמים",
+              "description": "מאפיית לחמים",
+              "inLanguage": "he-IL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "jina_shop.html",
+      "url": "https://www.lehamim.co.il/shop/",
+      "block_count": 1,
+      "top_level_types": [
+        "WebPage",
+        "ImageObject",
+        "BreadcrumbList",
+        "WebSite"
+      ],
+      "types": [
+        "BreadcrumbList",
+        "ImageObject",
+        "ListItem",
+        "ReadAction",
+        "WebPage",
+        "WebSite"
+      ],
+      "errors": [],
+      "blocks": [
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              "@id": "https://www.lehamim.co.il/shop/",
+              "url": "https://www.lehamim.co.il/shop/",
+              "name": "הזמנות - מאפיית לחמים",
+              "isPartOf": {
+                "@id": "https://www.lehamim.co.il/#website"
+              },
+              "primaryImageOfPage": {
+                "@id": "https://www.lehamim.co.il/shop/#primaryimage"
+              },
+              "image": {
+                "@id": "https://www.lehamim.co.il/shop/#primaryimage"
+              },
+              "thumbnailUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2021/11/16082745/%D7%9C%D7%95%D7%92%D7%95-%D7%A9%D7%A7%D7%95%D7%A3.png",
+              "datePublished": "2019-02-10T13:52:37+00:00",
+              "dateModified": "2021-11-16T06:28:26+00:00",
+              "breadcrumb": {
+                "@id": "https://www.lehamim.co.il/shop/#breadcrumb"
+              },
+              "inLanguage": "he-IL",
+              "potentialAction": [
+                {
+                  "@type": "ReadAction",
+                  "target": [
+                    "https://www.lehamim.co.il/shop/"
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "ImageObject",
+              "inLanguage": "he-IL",
+              "@id": "https://www.lehamim.co.il/shop/#primaryimage",
+              "url": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2021/11/16082745/%D7%9C%D7%95%D7%92%D7%95-%D7%A9%D7%A7%D7%95%D7%A3.png",
+              "contentUrl": "https://cdn.foodbox.co.il/wp-content/uploads/sites/34/2021/11/16082745/%D7%9C%D7%95%D7%92%D7%95-%D7%A9%D7%A7%D7%95%D7%A3.png",
+              "width": 1181,
+              "height": 1181
+            },
+            {
+              "@type": "BreadcrumbList",
+              "@id": "https://www.lehamim.co.il/shop/#breadcrumb",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "ראשי",
+                  "item": "https://www.lehamim.co.il/"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 2,
+                  "name": "הזמנות"
+                }
+              ]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.lehamim.co.il/#website",
+              "url": "https://www.lehamim.co.il/",
+              "name": "מאפיית לחמים",
+              "description": "מאפיית לחמים",
+              "inLanguage": "he-IL"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
