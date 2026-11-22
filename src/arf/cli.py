@@ -8,6 +8,7 @@ import sys
 from .collect import collect
 from .collect.transport import Refused
 from .notion import check_recorded, report
+from .replay import replay
 from .request import PHASES
 from .validation import InvalidRequest, validate_request
 
@@ -59,6 +60,17 @@ def main(argv: list[str] | None = None) -> int:
             check_schema.add_argument(
                 "recorded", type=Path, help="Directory of recorded <key>.json responses"
             )
+        if command == "replay":
+            subcommand.add_argument("bundle", type=Path, help="Frozen evidence bundle with SHA256SUMS.txt")
+            subcommand.add_argument("--out", type=Path, required=True, help="Empty output directory")
+            subcommand.add_argument(
+                "--prompts", type=Path, required=True, help="Recorded Prompt Versions (query.json + blocks/)"
+            )
+            subcommand.add_argument("--ack", type=Path, help="lint-ack.json for acknowledged warnings")
+            subcommand.add_argument("--run-id", default="replay", help="Run id for the draft marker")
+            subcommand.add_argument(
+                "--final", action="store_true", help="Reproduce the frozen report without the draft marker"
+            )
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -76,6 +88,17 @@ def main(argv: list[str] | None = None) -> int:
         output, passed = report(check_recorded(args.recorded))
         print(output, file=sys.stdout if passed else sys.stderr)
         return 0 if passed else 1
+    if args.command == "replay":
+        try:
+            result = replay(
+                args.bundle, args.out, args.prompts, run_id=args.run_id, final=args.final, ack=args.ack
+            )
+        except (OSError, ValueError) as error:
+            print(f"arf replay: {error}", file=sys.stderr)
+            return 1
+        checks = ", ".join(f"{key}={value}" for key, value in result["checks"].items())
+        print(f"arf replay: {'passed' if result['passed'] else 'FAILED'} ({checks}); see {args.out / 'replay.json'}")
+        return 0 if result["passed"] else 1
     if args.command != "validate":
         print(f"arf {args.command}: not implemented", file=sys.stderr)
         return 1

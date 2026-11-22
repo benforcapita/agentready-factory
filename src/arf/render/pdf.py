@@ -7,7 +7,7 @@ class BlockedResource(ValueError):
     """The HTML references a resource other than an inline data: URI."""
 
 
-def render_pdf(document: str, out: Path) -> None:
+def render_pdf(document: str, out: Path) -> int:
     """Write `document` (a full HTML string) to `out` as a PDF with embedded fonts.
 
     Only inline data: URIs are loaded; any other reference (remote images, tracking
@@ -25,7 +25,9 @@ def render_pdf(document: str, out: Path) -> None:
             blocked.append(url)
             raise BlockedResource(f"external resource blocked: {url}")
 
-    pdf = HTML(string=document, url_fetcher=DataOnlyFetcher(allowed_protocols={"data"})).write_pdf()
+    rendered = HTML(string=document, url_fetcher=DataOnlyFetcher(allowed_protocols={"data"})).render()
+    pdf = rendered.write_pdf()
     if blocked:
         raise BlockedResource("external resources are not allowed: " + ", ".join(sorted(set(blocked))))
     Path(out).write_bytes(pdf)
+    return len(rendered.pages)
