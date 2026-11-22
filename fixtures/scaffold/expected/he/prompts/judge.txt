@@ -1,0 +1,4 @@
+Fixture prompt for step judge, version 1 (production).
+Recorded test data only; not a production prompt.
+Input: {evidence}
+Output: JSON
