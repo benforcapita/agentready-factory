@@ -62,15 +62,26 @@ Unfinished HTML tokens are treated as literal text, failing closed for separator
 insertion probes rather than allowing a stray `<` to swallow a prohibited phrase.
 Other non-phrase rules retain their existing syntax-aware regexes and normalization.
 
-Hebrew phrases accept arbitrary stacks of ו/ה/ב/כ/ל/מ/ש clitics and usual
-nominal suffixes on each word, including construct י/ת and feminine ה/ת/ות
-alternations. Outer word boundaries remain mandatory; English boundaries are
-unchanged. Generated tests exhaust all stacks through length three crossed with
-every supported suffix on every Hebrew phrase, plus longer-stack checks.
-Hidden/display:none/visibility:hidden elements, numeric superscript/subscript
-annotations, footnote markers and reference-link destinations are excluded from
-visible phrase text. Common leader/feminine role and pricing inflections and
-שקל/שקלים/dollars/euros/¥/₹ amounts are supported.
+Hebrew phrase matching preserves Hebrew letters while folding non-Hebrew
+confusables; final ן remains distinct at word edges, so it cannot be a false ו
+prefix. It accepts stacked ו/ה/ב/כ/ל/מ/ש
+clitics on the first word and one productive inflection on a word; nonfinal
+words only take ים/ות/י/ת, while possessive/construct suffix forms are supported
+on the final word. The generated matrix crosses every prefix stack through length
+three with each phrase and with suffixes on representative meaningful stems;
+longer stacks and B1 forms are also checked. A leading ה is not accepted before
+an already-yod-final first stem such as ראשי, avoiding the B2 false positive in
+בדף הראשי צוות האתר. English word-boundary and separator behavior is unchanged.
+
+Markdown link destinations are excluded, but footnote text and reference labels
+remain in the source skeleton and are linted; numeric footnote markers remain
+syntax. This closes the small B3 source-text case; a complete render-then-lint
+contract remains a follow-up. Hidden/display:none HTML subtrees and numeric
+superscript/subscript annotations retain their earlier source-masking behavior,
+not a complete renderer visibility model. Previously supported leader/feminine/
+development role variants, quoted/discounted/per-hr pricing, and currency forms
+remain unchanged; this fix adds no further catch classes. Semantic context is not
+inferred.
 
 REWORK #5 scoped observations: N1 sentence punctuation remains fail-closed
 because REWORK #4 explicitly requires punctuation insertion and price: list to

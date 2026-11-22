@@ -12,7 +12,7 @@ import zlib
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.confusables import CONFUSABLES
-from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton
+from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton, hebrew_pattern
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
@@ -544,48 +544,89 @@ class LintTests(unittest.TestCase):
     def test_hebrew_affix_class(self):
         prefixes = ["".join(chars) for length in range(4) for chars in product(HEBREW_PREFIXES, repeat=length)]
         for rule, phrases in (("ben-role", ROLE_PHRASES), ("price-in-offer", PRICING_PHRASES)):
-            matcher = PhraseMatcher(phrases)
             self.assertNotIn(rule, WARNINGS)
             for phrase in phrases:
                 if not any("א" <= char <= "ת" for char in phrase):
                     continue
-                words = phrase.split()
-                word_skeletons = [Skeleton(word).text for word in words]
-                for prefix, suffix in product(prefixes, HEBREW_SUFFIXES):
-                    probe = Skeleton(prefix).text + "".join(word + Skeleton(suffix).text for word in word_skeletons)
-                    self.assertTrue(any(pattern.search(probe) for pattern in matcher.hebrew),
-                                    (phrase, prefix, suffix))
-                for position in range(len(words)):
-                    for prefix, suffix in product(HEBREW_PREFIXES, HEBREW_SUFFIXES):
-                        variant = words.copy()
-                        variant[position] = prefix + variant[position] + suffix
-                        self.assertTrue(list(matcher.finditer(" ".join(variant))), variant)
-        for phrase in ("אכראש צוות", "ראש צוותא", "paper hour", "steam leads", "תקציר מנהלים", "מי שמנהל את האתר"):
+                pattern = hebrew_pattern(phrase)
+                first_word = phrase.split()[0]
+                first_key = Skeleton(first_word, preserve_hebrew=True).text
+                for prefix in prefixes:
+                    if first_key.startswith("ראשי") and "ה" in prefix:
+                        continue
+                    probe = prefix + phrase
+                    key = Skeleton(probe, preserve_hebrew=True)
+                    matched = pattern.search(key.text)
+                    self.assertTrue(matched and key.boundary(*matched.span()),
+                                    (phrase, prefix))
+        meaningful_suffixes = {
+            "ים": ("ראש צוות", "צוות"), "ות": ("מנהל פיתוח", "מנהל"),
+            "י": ("מנהל פיתוח", "מנהל"), "ת": ("מנהל פיתוח", "מנהל"),
+            "ה": ("הצעת מחיר", "מחיר"),
+            **{suffix: ("ראש צוות", "צוות") for suffix in HEBREW_SUFFIXES[5:] if suffix != "ת"},
+        }
+        for suffix, (phrase, stem) in meaningful_suffixes.items():
+            if suffix not in HEBREW_SUFFIXES:
+                continue
+            words = phrase.split()
+            position = words.index(stem)
+            words[position] += suffix
+            pattern = hebrew_pattern(phrase)
+            for prefix in prefixes:
+                probe = prefix + " ".join(words)
+                key = Skeleton(probe, preserve_hebrew=True)
+                matched = pattern.search(key.text)
+                if not matched or not key.boundary(*matched.span()):
+                    self.fail((phrase, prefix, suffix))
+        for phrase in ("אכראש צוות", "ראש צוותא", "paper hour", "steam leads", "תקציר מנהלים", "מי שמנהל את האתר",
+                       "בשלב ראשון צוות האתר יוסיף נתונים מובנים לדפי המוצר.", "ראשית, צוות האתר…",
+                       "בדף הראשי צוות האתר…", "מנהלים פתוחים", "גם מנהל ופיתוח", "ההצעה מחירים"):
             self.assertNotIn("ben-role", rules(phrase, "notes-for-ben.md"))
             self.assertNotIn("price-in-offer", rules(phrase, "notes-for-ben.md"))
         self.assertIn("ben-role", rules("וכשבמהלראש צוותים", "notes-for-ben.md"))
 
-    def test_rework5_cli_probes(self):
-        roles = ("כראש צוות", "וראש צוות", "לראש צוות", "ראש צוותים", "ומנהל פיתוח", "כמנהל פיתוח",
-                 "כמנהל צוות פיתוח", "ראש הצוות", "ראשת צוות", "מנהלת פיתוח", "team leader", "team leaders",
-                 "development manager", "tech lead", 'team<span hidden>x</span> lead',
-                 'team<span style="display:none">x</span> lead', "team<sup>1</sup> lead", "team[^1] lead",
-                 "[team][a] lead", "בן שימש בעבר כראש צוות פיתוח ויודע לעבוד עם צוותי אתרים.")
-        prices = ("התמחור", "בתמחור", "ותמחור", "תמחורים", "ועלות השירות", "המחירון", "בהצעת מחיר",
-                  "את התמחור נסגור בפגישה.", "quoted", "discounted", "per hr", "50 שקל", "50 שקלים",
-                  "50 dollars", "50 euros", "50 ¥", "50 ₹")
+    def test_frozen_b2_b3_cli_regressions(self):
+        negatives = (
+            ("בשלב ראשון צוות האתר יוסיף נתונים מובנים לדפי המוצר.", 0),
+            ("ראשית, צוות האתר…", 0), ("בדף הראשי צוות האתר…", 0),
+            ("מנהלים פתוחים", 0), ("גם מנהל ופיתוח", 0), ("ההצעה מחירים", 1),
+        )
+        positives = tuple((phrase, rule) for rule, phrases in (
+            ("ben-role", ("כראש צוות", "וראש צוות", "לראש צוות", "ראש צוותים", "ומנהל פיתוח",
+                          "כמנהל פיתוח", "כמנהל צוות פיתוח", "ראש הצוות", "ראשת צוות", "מנהלת פיתוח",
+                          "team leader", "team leaders", "development manager", "tech lead",
+                          "team<span hidden>x</span> lead", 'team<span style="display:none">x</span> lead',
+                          "team<sup>1</sup> lead", "team[^1] lead",
+                          "בן שימש בעבר כראש צוות פיתוח ויודע לעבוד עם צוותי אתרים.")),
+            ("price-in-offer", ("התמחור", "בתמחור", "ותמחור", "תמחורים", "ועלות השירות", "המחירון",
+                                "בהצעת מחיר", "את התמחור נסגור בפגישה.", "quoted", "discounted", "per hr",
+                                "50 שקל", "50 שקלים", "50 dollars", "50 euros", "50 ¥", "50 ₹")),
+        ) for phrase in phrases)
+        b3 = (
+            ("הערה חשובה[^בן שימש כראש צוות פיתוח]", "ben-role"),
+            ("ראו [הערה][Ben is a dev team manager]", "ben-role"),
+            ("הערה[^50 USD]", "price-in-offer"), ("[הערה][50 USD]", "price-in-offer"),
+            ("[x][price list]", "price-in-offer"),
+        )
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for expected, probes in (("ben-role", roles), ("price-in-offer", prices)):
-                for probe in probes:
-                    with self.subTest(probe=probe):
-                        self.write(root, "report.md", GOOD.replace("Talk.", probe))
-                        process = self.cli(root)
-                        self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
-                        before = (root / "lint.json").read_bytes()
-                        self.assertEqual({f["rule"] for f in json.loads(before)["findings"] if f["level"] == "hard_fail"}, {expected})
-                        self.assertEqual(self.cli(root).returncode, 1)
-                        self.assertEqual((root / "lint.json").read_bytes(), before)
+            for probe, expected in (*negatives, *positives, *b3):
+                with self.subTest(probe=probe):
+                    self.write(root, "report.md", GOOD.replace("Talk.", probe))
+                    process = self.cli(root)
+                    if (probe, expected) in negatives:
+                        self.assertEqual(process.returncode, expected, process.stdout + process.stderr)
+                        output = json.loads((root / "lint.json").read_bytes())
+                        hard = [f for f in output["findings"] if f["level"] == "hard_fail"]
+                        self.assertFalse(hard, probe)
+                        if probe == "ההצעה מחירים":
+                            self.assertEqual({f["rule"] for f in output["findings"]}, {"generic-price"})
+                        continue
+                    self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
+                    before = (root / "lint.json").read_bytes()
+                    self.assertEqual({f["rule"] for f in json.loads(before)["findings"] if f["level"] == "hard_fail"}, {expected})
+                    self.assertEqual(self.cli(root).returncode, 1)
+                    self.assertEqual((root / "lint.json").read_bytes(), before)
 
     def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:

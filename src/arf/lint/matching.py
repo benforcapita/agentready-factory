@@ -62,9 +62,8 @@ def visible(source):
     masked = list(source)
     for match in re.finditer(r"\[[^\]\n]*\](\([^\n)]*\))", source):
         masked[match.start(1):match.end(1)] = " " * len(match[1])
-    for match in re.finditer(r"\[[^\]\n]*\](\[[^\]\n]*\])|(?P<footnote>\[\^[^\]\n]+\])", source):
-        start, end = match.span("footnote") if match["footnote"] else match.span(1)
-        masked[start:end] = " " * (end - start)
+    for match in re.finditer(r"\[\^\d+\]", source):
+        masked[match.start():match.end()] = " " * len(match[0])
     text = "".join(masked)
     if "<" not in text and "&" not in text:
         return text, [(i, i + 1) for i in range(len(text))]
@@ -79,7 +78,7 @@ def letter_or_number(char):
     return unicodedata.category(char)[0] in "LN"
 
 
-def units(text, spans):
+def units(text, spans, *, preserve_hebrew=False):
     index = 0
     while index < len(text):
         end = index + 1
@@ -96,11 +95,23 @@ def units(text, spans):
             else:
                 decomposed = "".join(c for c in unicodedata.normalize("NFKD", char)
                                      if not unicodedata.category(c).startswith("M"))
-                value = "".join(CONFUSABLES.get(c, c) for c in decomposed)
+                value = "".join(_hebrew_fold(text, index, end, c) if preserve_hebrew and
+                                "\u0590" <= c <= "\u05ff" else CONFUSABLES.get(c, c)
+                                for c in decomposed)
             for base in value:
                 if letter_or_number(base):
                     yield base, (spans[index][0], spans[end - 1][1])
         index = end
+
+
+def _hebrew_fold(text, start, end, char):
+    if char != "ן":
+        return char
+    before = next((c for c in reversed(text[:start])
+                   if unicodedata.category(c) not in {"Cf", "Mn", "Mc", "Me"}), " ")
+    after = next((c for c in text[end:]
+                  if unicodedata.category(c) not in {"Cf", "Mn", "Mc", "Me"}), " ")
+    return CONFUSABLES[char] if letter_or_number(before) and letter_or_number(after) else char
 
 
 @dataclass(frozen=True)
@@ -122,10 +133,11 @@ class Match:
 
 
 class Skeleton:
-    def __init__(self, source, *, money=False):
+    def __init__(self, source, *, money=False, preserve_hebrew=False):
         self.source = source
         self.visible, self.visible_spans = visible(source)
-        pairs = [(char, span) for char, span in units(self.visible, self.visible_spans)
+        pairs = [(char, span) for char, span in units(self.visible, self.visible_spans,
+                                                       preserve_hebrew=preserve_hebrew)
                  if money or letter_or_number(char)]
         self.text = "".join(char for char, _ in pairs)
         self.spans = [span for _, span in pairs]
@@ -152,19 +164,51 @@ HEBREW_SUFFIXES = ("", "ים", "ות", "י", "ה", "ו", "ם", "ן", "ת", "יו
 
 
 def hebrew_pattern(phrase):
-    prefix = "[" + re.escape(Skeleton(HEBREW_PREFIXES).text) + "]*"
-    suffix = "(?:" + "|".join(sorted({re.escape(Skeleton(s).text) for s in HEBREW_SUFFIXES},
-                                    key=lambda s: (-len(s), s))) + ")"
-    words = []
-    for index, word in enumerate(phrase.split()):
-        if index and word.startswith("ה"):
-            word = word[1:]
-        forms = {word}
-        if word.endswith("ת") and not word.endswith("ות"):
-            forms.update((word[:-1] + "ה", word[:-1] + "ות"))
-        root = "(?:" + "|".join(sorted({re.escape(Skeleton(w).text) for w in forms})) + ")"
-        words.append(prefix + root + suffix)
-    return re.compile("".join(words))
+    words = phrase.split()
+    prefix_chars = set(Skeleton(HEBREW_PREFIXES, preserve_hebrew=True).text)
+    for char in tuple(prefix_chars):
+        folded = CONFUSABLES.get(char)
+        if folded and len(folded) == 1:
+            prefix_chars.add(folded)
+            prefix_chars.update(candidate for candidate, value in CONFUSABLES.items()
+                                if value == folded and "\u0590" <= candidate <= "\u05ff")
+    prefix_chars = "".join(sorted(prefix_chars))
+    variants = {tuple(words)}
+    for index, word in enumerate(words):
+        if word.endswith("י"):
+            continue
+        for suffix in HEBREW_SUFFIXES[1:]:
+            if index < len(words) - 1 and suffix not in {"ים", "ות", "י", "ת"}:
+                continue
+            changed = words.copy()
+            changed[index] += suffix
+            variants.add(tuple(changed))
+    alternatives = []
+    for variant in variants:
+        tokens = []
+        for index, word in enumerate(variant):
+            if index == 0:
+                allowed = prefix_chars.replace("ה", "") if word.startswith("ראשי") else prefix_chars
+                prefix = "[" + re.escape(allowed) + "]*"
+            else:
+                prefix = re.escape(Skeleton("ה").text) + "?"
+            key = Skeleton(word, preserve_hebrew=True).text
+            token = []
+            for char in key:
+                aliases = {char}
+                if char in CONFUSABLES:
+                    folded = CONFUSABLES[char]
+                    aliases.add(folded)
+                    aliases.update(candidate for candidate, value in CONFUSABLES.items()
+                                   if value == folded and candidate != "ן" and
+                                   "\u0590" <= candidate <= "\u05ff")
+                if len(aliases) == 1:
+                    token.append(re.escape(char))
+                else:
+                    token.append("(?:" + "|".join(re.escape(alias) for alias in sorted(aliases)) + ")")
+            tokens.append(prefix + "".join(token))
+        alternatives.append("".join(tokens))
+    return re.compile("(?:" + "|".join(sorted(alternatives, key=lambda p: -len(p))) + ")")
 
 
 class PhraseMatcher:
@@ -183,13 +227,14 @@ class PhraseMatcher:
                 if skeleton.boundary(start, end):
                     found.append(skeleton.match(start, end))
                 start = skeleton.text.find(key, start + 1)
+        hebrew_skeleton = Skeleton(source, preserve_hebrew=True)
         for pattern in self.hebrew:
             cursor = 0
-            while match := pattern.search(skeleton.text, cursor):
+            while match := pattern.search(hebrew_skeleton.text, cursor):
                 start = match.start()
                 for end in range(match.end(), start, -1):
-                    if skeleton.boundary(start, end) and pattern.fullmatch(skeleton.text, start, end):
-                        found.append(skeleton.match(start, end))
+                    if hebrew_skeleton.boundary(start, end) and pattern.fullmatch(hebrew_skeleton.text, start, end):
+                        found.append(hebrew_skeleton.match(start, end))
                         break
                 cursor = start + 1
         cursor = -1
@@ -197,7 +242,6 @@ class PhraseMatcher:
             if match.start() >= cursor:
                 yield match
                 cursor = match.end()
-
 
 class MoneyMatcher:
     codes = "(?:" + "|".join(sorted((Skeleton(code).text for code in (
