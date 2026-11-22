@@ -44,12 +44,12 @@ SOURCE_ALIASES = {
     "is-agentic": r"is-agentic", "webfetch": r"WebFetch", "tinyfish": r"TinyFish", "jina": r"Jina",
     "validator": r"validator\.schema\.org", "sitemap": r"sitemap|מפת[\s-]+האתר|מפת[\s-]+אתר", "robots": r"robots\.txt",
 }
-CURRENCY = r"(?:₪|\$|€|£|NIS\b|ILS\b|USD\b|ש[\"״']ח)"
+CURRENCY = r"(?:₪|(?:US|CA)?\$|€|£|(?<![A-Za-z_])(?:NIS|ILS|USD)(?![A-Za-z_])|ש[\"״']ח)"
 AMOUNT = r"\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?"
 MONEY = re.compile(rf"(?:{AMOUNT}\s*{CURRENCY}|{CURRENCY}\s*{AMOUNT})", re.I)
-PRICING = re.compile(r"הצעת[\s-]+מחיר|תמחור|עלות[\s-]+השירות|מחירון|\b(?:price[\s-]+lists?|pricing|quotes?|fees?|per[\s-]+hour|hourly[\s-]+rates?|discounts?|retainers?)\b", re.I)
+PRICING = re.compile(r"הצעת[\s-]+מחיר|תמחור|עלות[\s-]+השירות|מחירון|\b(?:p\s*r\s*i\s*c\s*e[\s_./-]*lists?|pricing|quotes?|fees?|per[\s-]+hour|hourly[\s-]+rates?|discounts?|retainers?)\b", re.I)
 GENERIC_PRICE = re.compile(r"מחיר|\b(?:price|cost)\b", re.I)
-ROLE = re.compile(r"ראש[\s-]+צו{1,2}ת(?:[\s-]+פי?תוח)?|מנהל[\s-]+צו{1,2}ת[\s-]+פי?תוח|מנהל[\s-]+פי?תוח|\b(?:dev(?:elopment)?[\s-]+team[\s-]+manager|engineering[\s-]+manager|R&D[\s-]+manager|team[\s-]+lead)\b", re.I)
+ROLE = re.compile(r"ראש[\s-]+צו{1,2}ת(?:[\s-]+פי?תוח)?|מנהל[\s-]+צו{1,2}ת[\s-]+פי?תוח|מנהל[\s-]+פי?תוח|\b(?:d\s*e\s*v(?:elopment)?[\s-]+team[\s-]+manager|engineering[\s-]+manager|R&D[\s-]+manager|team[\s-]+lead)\b", re.I)
 IMPLEMENTATION = re.compile(r"<script\b|application/ld\+json|openingHoursSpecification|@type\b|Disallow:|User-agent:|\.htaccess\b|wp-config\b|add[\s-]+the[\s-]+following|הוסיפו[\s-]+את[\s-]+הקוד", re.I)
 SECRET = re.compile(
     r"\bAKIA[A-Z0-9]{16,}|\b(?:sk_live_|sk-)[A-Za-z0-9_-]{16,}"
@@ -65,12 +65,13 @@ TRACKERS = ("google-analytics.com", "googletagmanager.com", "doubleclick.net", "
             "segment.com", "segment.io", "hotjar.com", "hotjar.io", "analytics.google.com")
 BLOCKED = re.compile(r"חסום|נחסם|נחסמת|חסימה|\bblock(?:ed|ing)\b", re.I)
 UNCERTAIN = re.compile(r"לא[\s-]+עקבי|אינה[\s-]+עקבית|לא[\s-]+הוכח|לא[\s-]+מוכח|לא[\s-]+הוכחה|not[\s-]+(?:consistent|proven)|inconsistent", re.I)
+DASH_LIKES = "\u02d7\u2043\u2212\u2796"
 
 
 def normalize_for_matching(text):
-    return "".join("-" if unicodedata.category(char) == "Pd" else char
+    return "".join("-" if unicodedata.category(char) == "Pd" or char in DASH_LIKES else char
                    for char in unicodedata.normalize("NFKC", text)
-                   if unicodedata.category(char) not in {"Cf", "Mn"})
+                   if unicodedata.category(char) not in {"Cf", "Mn", "Mc", "Me"})
 
 
 def host(url):

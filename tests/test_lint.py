@@ -10,7 +10,7 @@ import zlib
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
-from arf.lint.rules import MESSAGES, normalize_for_matching
+from arf.lint.rules import DASH_LIKES, MESSAGES, normalize_for_matching
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
@@ -406,7 +406,7 @@ class LintTests(unittest.TestCase):
         for code in range(sys.maxunicode + 1):
             char = chr(code)
             category = unicodedata.category(char)
-            if category in {"Cf", "Mn", "Pd"}:
+            if category in {"Cf", "Mn", "Mc", "Me", "Pd"}:
                 self.assertEqual(normalize_for_matching(char), "-" if category == "Pd" else "", hex(code))
         original = inspect_artifact("notes-for-ben.md", "dev team manager", "shadow")
         evasion = inspect_artifact("notes-for-ben.md", "\n\ndev\u200b team\u200d manager", "shadow")
@@ -421,6 +421,41 @@ class LintTests(unittest.TestCase):
         self.assertIn("employer-mention", rules("Example—Employer", "notes-for-ben.md", config=CONFIG))
         self.assertIn("secret", rules("-----BEGIN—RSA—PRIVATE—KEY-----", "notes-for-ben.md"))
         self.assertNotIn("israel-time", rules("09:00 Israel—time", "notes-for-ben.md"))
+
+    def test_qa_rework3_probes(self):
+        cases = [(phrase, "price-in-offer") for phrase in (
+            "pricelist", "pricelists", "price\u00adlist", "price\u00adlists",
+            "per\u2212hour", "hourly\u2212rate", "price\u2043list",
+            "pr\u20dd ice list", "pri\u093e ce list", "pri\u0940 ce list",
+            "pr\u20ddice list", "pri\u093ece list", "pri\u0940ce list",
+            "price_list", "price.list", "price/list", "50 US$", "50 CA$", "ILS50", "50 ILS",
+        )]
+        cases.extend((phrase, "ben-role") for phrase in (
+            "dev\u2212team\u2212manager", "team\u2212lead",
+            "de\u20dd v team manager", "d\u093e ev team manager", "d\u0940 ev team manager",
+            "de\u20ddv team manager", "d\u093eev team manager", "d\u0940ev team manager",
+        ))
+        for dash in DASH_LIKES + "\u207b\u208b":
+            self.assertEqual(normalize_for_matching(dash), "-")
+            cases.extend(((f"team{dash}lead", "ben-role"), (f"per{dash}hour", "price-in-offer")))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for phrase, expected in cases:
+                with self.subTest(probe=phrase):
+                    self.write(root, "report.md", GOOD.replace("Talk.", phrase))
+                    first = self.cli(root)
+                    self.assertEqual(first.returncode, 1, first.stdout + first.stderr)
+                    before = (root / "lint.json").read_bytes()
+                    result = json.loads(before)
+                    self.assertEqual({f["rule"] for f in result["findings"]}, {expected})
+                    self.assertEqual(self.cli(root).returncode, 1)
+                    self.assertEqual((root / "lint.json").read_bytes(), before)
+                    self.assertEqual(rules(HTML_GOOD.replace("Talk.", phrase), "report.html", final=True), {expected})
+                    self.assertEqual(rules(phrase, "notes-for-ben.md"), {expected})
+            for phrase in ("priceless", "pricelistening", "TRAILS50", "50ILSE", "50 USAGE"):
+                with self.subTest(control=phrase):
+                    self.write(root, "report.md", GOOD.replace("Talk.", phrase))
+                    self.assertEqual(self.cli(root).returncode, 0)
 
     def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -481,6 +516,13 @@ class LintTests(unittest.TestCase):
                 before = (root / "lint.json").read_bytes()
                 self.assertEqual(self.cli(root, "--phase", phase).returncode, 0)
                 self.assertEqual((root / "lint.json").read_bytes(), before)
+            process = subprocess.run([sys.executable, "-m", "arf.render", str(GOLDEN / "report.md"),
+                                      "--out", str(output), "--final"],
+                                     cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            (root / "report.pdf").write_bytes((output / "report.pdf").read_bytes())
+            self.assertEqual(self.cli(root).returncode, 1)
+            self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"missing-draft-marker"})
 
     def test_pdf_cmaps_and_invalid_structures(self):
         mapping = unicode_map(b"1 beginbfrange <01> <03> <05d0> endbfrange")
