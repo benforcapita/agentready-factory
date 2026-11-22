@@ -116,11 +116,12 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertNotIn('class="en">amp<', rendered)
 
     def test_hebrew_html_comments_with_gt_do_not_swallow_the_report(self):
-        source = "# בדיקה\n\n<!-- note: score > 3 -->\n\n<!-- source: A -> B -->\n\nפסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n"
+        source = "# בדיקה\n\n<!-- note: score > 3 -->\n\nפסקה ראשונה XYZ\n\n<!-- source: A -> B -->\n\nפסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n"
         rendered = render_html(source, draft_marker=False)
         self.assertIn("<!-- note: score > 3 -->", rendered)
         self.assertIn("<!-- source: A -> B -->", rendered)
         self.assertNotIn("--&gt;", rendered)
+        self.assertIn('פסקה ראשונה <span dir="ltr" class="en">XYZ</span>', rendered)
         self.assertIn('פסקה חשובה <span dir="ltr" class="en">ABC</span> אחרי ההערה', rendered)
         self.assertIn("<h2>סעיף נוסף</h2>", rendered)
         self.assertIn("עוד טקסט", rendered)
@@ -219,9 +220,13 @@ class PdfTests(RenderCommand, unittest.TestCase):
 
     def test_hebrew_pdf_renders_content_after_html_comments_with_gt(self):
         source = self.out / "comment.md"
-        source.write_text("# בדיקה\n\n<!-- source: A -> B -->\n\nפסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n", encoding="utf-8")
+        source.write_text(
+            "# בדיקה\n\n<!-- note: score > 3 -->\n\nפסקה ראשונה XYZ\n\n<!-- source: A -> B -->\n\n"
+            "פסקה חשובה ABC אחרי ההערה\n\n## סעיף נוסף\n\nעוד טקסט\n",
+            encoding="utf-8",
+        )
         text = self.text(self.render_pdf_fixture(source, "--lang", "he", "--final"))
-        for phrase in ("פסקה חשובה", "ABC", "סעיף נוסף", "עוד טקסט"):
+        for phrase in ("פסקה ראשונה", "XYZ", "פסקה חשובה", "ABC", "סעיף נוסף", "עוד טקסט"):
             self.assertIn(phrase, text)
 
     def test_external_resources_are_refused(self):
