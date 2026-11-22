@@ -4,10 +4,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
-from arf.lint.rules import MESSAGES
+from arf.lint.rules import MESSAGES, normalize_for_matching
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
@@ -58,6 +59,35 @@ Talk.
 | discovery/0-0-0.body | Read |
 | discovery/0-0-1.body | Read |
 """
+
+HTML_GOOD = COMMENT + """
+<h1>AgentReady report</h1>
+<h2>Executive summary</h2><p>Proposal: Let's talk.</p>
+<h2>1. Why it matters</h2><p>Context.</p>
+<h2>2. Findings</h2>
+<table><thead><tr><th>#</th><th>Finding</th><th>Impact</th></tr></thead><tbody>
+<tr><td>1</td><td>HTTP 403 and is-agentic blocked</td><td>Cannot read</td></tr>
+<tr><td>2</td><td>Jina observation</td><td>Readability</td></tr>
+<tr><td>3</td><td>sitemap observation</td><td>Discovery</td></tr>
+</tbody></table>
+<h2>3. What works</h2><p>Content.</p>
+<h2>4. Offer</h2><ol><li>Access policy.</li><li>Business identity.</li>
+<li>Product representation.</li><li>Measurement.</li></ol>
+<h2>5. Next</h2><p>Talk.</p>
+<h2>Appendix</h2>
+<table><thead><tr><th>Source</th><th>Result</th></tr></thead><tbody>
+<tr><td>probes.csv</td><td>HTTP 403</td></tr>
+<tr><td>discovery/0-0-0.body</td><td>Read</td></tr>
+<tr><td>discovery/0-0-1.body</td><td>Read</td></tr>
+</tbody></table>
+"""
+
+
+def pdf_stream(content):
+    compressed = zlib.compress(content)
+    return (b"%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n2 0 obj\n"
+            + f"<< /Length {len(compressed)} /Filter /FlateDecode >>\nstream\n".encode()
+            + compressed + b"\nendstream\nendobj\n%%EOF")
 
 
 def rules(content, file="report.md", **kwargs):
@@ -117,6 +147,9 @@ class LintTests(unittest.TestCase):
             self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
             self.assertEqual(out.read_bytes(), (FIXTURES / "expected/lehamim.json").read_bytes())
             self.assertEqual(json.loads(out.read_text())["summary"]["hard_fail"], 0)
+            first = out.read_bytes()
+            self.assertEqual(self.cli(GOLDEN, "--final", "--ack", FIXTURES / "lehamim/lint-ack.json", "--out", out).returncode, 0)
+            self.assertEqual(out.read_bytes(), first)
 
     def test_seeded_cli_and_expected(self):
         directories = sorted((FIXTURES / "seeded").iterdir())
@@ -131,6 +164,9 @@ class LintTests(unittest.TestCase):
                     active = {f["rule"] for f in result["findings"] if not f["acknowledged"]}
                     self.assertEqual(active, {directory.name[3:]})
                     self.assertEqual(out.read_bytes(), (FIXTURES / "expected" / (directory.name + ".json")).read_bytes())
+                    first = out.read_bytes()
+                    self.assertEqual(self.cli(directory, "--out", out).returncode, 1)
+                    self.assertEqual(out.read_bytes(), first)
 
     def test_acks_and_line_stability(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -234,9 +270,9 @@ class LintTests(unittest.TestCase):
                 self.write(root, path, "Fetched https://evidence.test/page")
             self.write(root, "discovery.csv", "domain,path,url,status,size,body\nclient.test,/,https://evidence.test/page,200,1,discovery/0-0-0.body\n")
             self.write(root, "evidence.json", json.dumps(dict(site="https://client.test", hosts=["client.test"], files=[dict(path=p) for p in (*paths, "discovery.csv")])))
-            self.write(root, "report.pdf", "/Type /Pages\n" + "/Type /Page\n" * 4)
+            self.write(root, "report.pdf", "/Type /Pages\n" + "/Type /Page\n" * 4 + DRAFT_MARKER)
             self.assertTrue(lint(root)["passed"])
-            self.write(root, "report.pdf", "/Type /Page\n" * 5)
+            self.write(root, "report.pdf", "/Type /Page\n" * 5 + DRAFT_MARKER)
             self.assertIn("pdf-length", {f["rule"] for f in lint(root)["findings"]})
             self.write(root, "report.md", GOOD.replace("probes.csv | HTTP", "unknown.csv | HTTP"))
             self.assertIn("appendix-evidence", {f["rule"] for f in lint(root)["findings"]})
@@ -250,10 +286,10 @@ class LintTests(unittest.TestCase):
             self.assertIn("non-evidence-url", {f["rule"] for f in lint(root)["findings"]})
             self.write(root, "probes.csv", "Captured HTML links to https://unrelated.test/page")
             self.assertIn("non-evidence-url", {f["rule"] for f in lint(root)["findings"]})
-            self.write(root, "findings.json", '{"text":"Bearer obviously_fake_value_123456789"}')
+            self.write(root, "findings.json", '{"findings":[],"text":"Bearer obviously_fake_value_123456789"}')
             result = lint(root)
             self.assertIn("secret", {f["rule"] for f in result["findings"]})
-            self.assertTrue(any(s["rule"] == "uncited-finding" and "schema" in s["reason"] for s in result["skipped_checks"]))
+            self.assertNotIn("uncited-finding", {s["rule"] for s in result["skipped_checks"]})
 
     def test_factory_config_and_contact_line(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -277,6 +313,142 @@ class LintTests(unittest.TestCase):
         self.assertIn("findings-table", rules(GOOD.replace("| 2 | Jina observation | Readability |", "| 2 | Jina observation | Readability | extra |")))
         self.assertIn("sent-status", rules("סטטוס: נשלח", "notes-for-ben.md"))
         self.assertNotIn("sent-status", rules("This draft must not be sent.", "notes-for-ben.md"))
+
+    def test_qa_unicode_pricing_and_control_probes(self):
+        cases = [
+            ("50＄", GOOD.replace("Talk.", "50＄"), "price-in-offer"),
+            ("50 ＵＳＤ", GOOD.replace("Talk.", "50 ＵＳＤ"), "price-in-offer"),
+            ("dev U+200B", GOOD + "\ndev\u200b team manager", "ben-role"),
+            ("team U+200D", GOOD + "\ndev team\u200d manager", "ben-role"),
+            ("niqqud", GOOD + "\nרֹאשׁ צֶוֶת", "ben-role"),
+            ("fees", GOOD.replace("Talk.", "fees"), "price-in-offer"),
+            ("discounts", GOOD.replace("Talk.", "discounts"), "price-in-offer"),
+            ("50 USD", GOOD.replace("Talk.", "50 USD"), "price-in-offer"),
+            ("lowercase image", GOOD + '<img src="https://example.test/a.png">', "tracking-pixel"),
+            ("entity image", GOOD + '<img src="https&#58;//example.test/a.png">', "tracking-pixel"),
+            ("uppercase image scheme", GOOD + '<img src="HTTPS://example.test/a.png">', "tracking-pixel"),
+            ("tilde fence", GOOD + "\n~~~\nexample\n~~~", "code-block"),
+            ("indented fence", GOOD + "\n    ```\n    example\n    ```", "code-block"),
+            ("step by step", GOOD.replace("Access policy.", "First, open it. Then, change it."), "detailed-offer-step"),
+        ]
+        for phrase in ("price   list", "price\nlist", "price lists", "quotes", "retainers", "hourly   rates", "per\thour", "הצעת   מחיר", "עלות\nהשירות"):
+            cases.append((phrase, GOOD.replace("Talk.", phrase), "price-in-offer"))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, content, expected in cases:
+                with self.subTest(probe=name):
+                    self.write(root, "report.md", content)
+                    process = self.cli(root)
+                    self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
+                    result = json.loads((root / "lint.json").read_text())
+                    self.assertEqual({f["rule"] for f in result["findings"] if not f["acknowledged"]}, {expected})
+            self.write(root, "report.md", GOOD)
+            self.write(root, "report.html", HTML_GOOD)
+            self.assertEqual(self.cli(root).returncode, 1)
+            self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"missing-draft-marker"})
+            self.write(root, "report.html", HTML_GOOD + "<footer>" + DRAFT_MARKER + "</footer>")
+            self.assertEqual(self.cli(root).returncode, 0)
+
+    def test_normalization_scope_and_stable_fingerprints(self):
+        self.assertEqual(normalize_for_matching("רֹאשׁ\u200b צֶוֶת\u200d"), "ראש צות")
+        self.assertEqual(normalize_for_matching("５０ ＵＳＤ"), "50 USD")
+        self.assertEqual(normalize_for_matching("e\u0301"), "é")
+        original = inspect_artifact("notes-for-ben.md", "dev team manager", "shadow")
+        evasion = inspect_artifact("notes-for-ben.md", "\n\ndev\u200b team\u200d manager", "shadow")
+        self.assertEqual(original[0]["fingerprint"], evasion[0]["fingerprint"])
+        for role in ("ר\u0591אש צוות", "מְנַהֵל צֶוֶת פִּתּוּחַ", "dev\u2060 team manager", "dev&#8203; team manager"):
+            self.assertIn("ben-role", rules(role, "report.html", final=True))
+
+    def test_pdf_marker_raw_flate_and_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            absent = b"%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n%%EOF"
+            for phase in ("shadow", "reviewed"):
+                for name, pdf, code in (
+                    ("no marker", absent, 1),
+                    ("empty PDF", b"", 1),
+                    ("Flate without marker", pdf_stream(b"no marker"), 1),
+                    ("corrupt Flate", b"<< /Filter /FlateDecode >>\nstream\nbroken\nendstream", 1),
+                    ("raw UTF8", absent + DRAFT_MARKER.encode("utf-8"), 0),
+                    ("raw UTF16BE", absent + DRAFT_MARKER.encode("utf-16-be"), 0),
+                    ("Flate UTF8", pdf_stream(DRAFT_MARKER.encode("utf-8")), 0),
+                    ("Flate UTF16BE", pdf_stream(DRAFT_MARKER.encode("utf-16-be")), 0),
+                    ("Flate UTF16LE", pdf_stream(DRAFT_MARKER.encode("utf-16-le")), 0),
+                ):
+                    with self.subTest(phase=phase, pdf=name):
+                        (root / "report.pdf").write_bytes(pdf)
+                        process = self.cli(root, "--phase", phase)
+                        self.assertEqual(process.returncode, code, process.stderr + process.stdout)
+                        result = json.loads((root / "lint.json").read_text())
+                        active = {f["rule"] for f in result["findings"]}
+                        self.assertEqual(active, {"missing-draft-marker"} if code else set())
+                        if code:
+                            self.assertIn("could not be verified", result["findings"][0]["message"])
+            (root / "report.pdf").write_bytes(absent)
+            self.assertEqual(self.cli(root, "--final").returncode, 0)
+            self.assertEqual(self.cli(root, "--phase", "volume").returncode, 0)
+
+    def test_structured_findings_grounding_and_shapes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            self.write(root, "probes.csv", "HTTP 403")
+            data = {"findings": [{"id": 1, "evidence": ["probes.csv"]}]}
+            self.write(root, "findings.json", json.dumps(data))
+            self.assertEqual(self.cli(root).returncode, 0)
+            result = lint(root)
+            self.assertNotIn("uncited-finding", {s["rule"] for s in result["skipped_checks"]})
+            self.assertIn("probes.csv", {i["file"] for i in result["inputs"]})
+            for references in (["missing-evidence.txt"], [], ["../outside.txt"], [str(root / "probes.csv")]):
+                with self.subTest(evidence=references):
+                    data["findings"][0]["evidence"] = references
+                    self.write(root, "findings.json", json.dumps(data))
+                    process = self.cli(root)
+                    self.assertEqual(process.returncode, 1, process.stderr)
+                    self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"uncited-finding"})
+            paths = ("probes.csv", "discovery/0-0-0.body", "discovery/0-0-1.body")
+            for path in paths:
+                self.write(root, path, "observation")
+            self.write(root, "evidence.json", json.dumps({"files": [{"path": path} for path in paths]}))
+            data["findings"][0]["evidence"] = ["probes.csv"]
+            self.write(root, "findings.json", json.dumps(data))
+            self.assertEqual(self.cli(root).returncode, 0)
+            self.write(root, "unlisted.txt", "observation")
+            for refs in (["unlisted.txt"], ["probes.csv", "missing-evidence.txt"]):
+                data["findings"][0]["evidence"] = refs
+                self.write(root, "findings.json", json.dumps(data))
+                self.assertEqual(self.cli(root).returncode, 1)
+                self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"uncited-finding"})
+            (root / "probes.csv").unlink()
+            data["findings"][0]["evidence"] = ["probes.csv"]
+            self.write(root, "findings.json", json.dumps(data))
+            self.assertEqual(self.cli(root).returncode, 1)
+            for bad in ({}, [], {"findings": {}}, {"findings": [None]}, {"findings": [{"id": ""}]},
+                        {"findings": [{"id": 1, "evidence": "probes.csv"}]},
+                        {"findings": [{"id": True, "evidence": []}]},
+                        {"findings": [{"id": 1, "evidence": [4]}]},
+                        {"findings": [{"id": 1, "evidence": []}, {"id": "1", "evidence": []}]}):
+                with self.subTest(shape=bad):
+                    self.write(root, "findings.json", json.dumps(bad))
+                    self.assertEqual(self.cli(root).returncode, 2)
+            self.write(root, "findings.json", '{"findings": []}')
+            self.assertEqual(self.cli(root).returncode, 0)
+
+    def test_deterministic_with_optional_inputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            paths = ("probes.csv", "discovery/0-0-0.body", "discovery/0-0-1.body")
+            for path in paths:
+                self.write(root, path, "observation")
+            self.write(root, "findings.json", json.dumps({"findings": [{"id": 1, "evidence": ["probes.csv"]}]}))
+            self.write(root, "evidence.json", json.dumps({"files": [{"path": path} for path in paths]}))
+            (root / "report.pdf").write_bytes(pdf_stream(DRAFT_MARKER.encode("utf-8")))
+            self.assertEqual(self.cli(root).returncode, 0)
+            first = (root / "lint.json").read_bytes()
+            self.assertEqual(self.cli(root).returncode, 0)
+            self.assertEqual((root / "lint.json").read_bytes(), first)
 
 
 if __name__ == "__main__":

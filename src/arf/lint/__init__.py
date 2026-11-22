@@ -9,7 +9,8 @@ import re
 import unicodedata
 
 from .document import sections, tables
-from .rules import MESSAGES, SECRET, SOURCE_ALIASES, URL, WARNINGS, host
+from .pdf import has_draft_marker
+from .rules import MESSAGES, SECRET, SOURCE_ALIASES, URL, WARNINGS, host, normalize_for_matching
 from .rules import inspect_artifact as scan_artifact
 
 
@@ -89,6 +90,23 @@ def safe_file(root, name):
     return resolved if resolved.is_relative_to(root.resolve()) and resolved.is_file() else None
 
 
+def load_findings(raw):
+    data = json.loads(raw)
+    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
+        raise ValueError("findings.json must contain findings[].id and evidence (a list of paths)")
+    ids = set()
+    for item in data["findings"]:
+        if not isinstance(item, dict) or type(item.get("id")) not in {str, int} or not normalize_for_matching(str(item["id"])).strip():
+            raise ValueError("each findings.json finding needs a nonempty string or integer id")
+        identity = normalize_for_matching(str(item["id"])).strip()
+        if identity in ids:
+            raise ValueError("findings.json ids must be unique")
+        ids.add(identity)
+        if not isinstance(item.get("evidence"), list) or any(not isinstance(path, str) for path in item["evidence"]):
+            raise ValueError("each findings.json finding needs evidence: a list of paths")
+    return data["findings"]
+
+
 def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_config=None):
     if phase not in {"shadow", "reviewed", "volume"}:
         raise ValueError("invalid phase")
@@ -140,7 +158,7 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
     else:
         for rule in ("appendix-evidence", "non-evidence-url"):
             skip(rule, "evidence.json collector manifest is absent.")
-    markdown = read("report.md").decode("utf-8")
+    markdown = normalize_for_matching(read("report.md").decode("utf-8"))
     for file in ("notes-for-ben.md", "report.html", "report.md"):
         if (root / file).exists():
             content = read(file).decode("utf-8")
@@ -163,13 +181,28 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
                 if target and not re.match(r"(?:https?:)?//", target) and not safe_file(root, target):
                     findings.append(finding("uncited-finding", "report.md", markdown.count("\n", 0, offset) + number, match[0]))
     if (root / "findings.json").exists():
-        json.loads(read("findings.json"))
-        skip("uncited-finding", "Structured findings.json citation checks deferred: no findings schema exists in this repo or golden bundle. Explicit report links are checked.")
+        entries = load_findings(read("findings.json"))
+        manifest_paths = {entry["path"] for entry in files}
+        for item in entries:
+            evidence = item["evidence"]
+            invalid = []
+            for path in evidence:
+                if not safe_file(root, path) or (manifest is not None and path not in manifest_paths):
+                    invalid.append(path)
+                else:
+                    read(path)
+            if not evidence or invalid:
+                excerpt = json.dumps(dict(id=item["id"], evidence=invalid if invalid else evidence), ensure_ascii=False, sort_keys=True)
+                findings.append(finding("uncited-finding", "findings.json", 1, excerpt))
     else:
         skip("uncited-finding", "findings.json is absent; explicit report evidence links are checked when present.")
     skip("public-side-effect", "No run/public-side-effect record format exists in this repository; no event schema invented.")
     if (root / "report.pdf").exists():
         pdf = read("report.pdf")
+        if phase in {"shadow", "reviewed"} and not final and not has_draft_marker(pdf):
+            item = finding("missing-draft-marker", "report.pdf", 1, "PDF draft footer could not be verified")
+            item["message"] = "The PDF draft marker could not be verified in raw bytes or FlateDecode streams; do not send."
+            findings.append(item)
         pages = len(re.findall(rb"/Type\s*/Page\b", pdf))
         if pages > 4:
             findings.append(finding("pdf-length", "report.pdf", 1, f"{pages} pages"))
@@ -182,7 +215,7 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
         if (root / file).exists():
             text = read(file).decode("utf-8")
             for number, line in enumerate(text.splitlines(), 1):
-                for match in SECRET.finditer(line):
+                for match in SECRET.finditer(normalize_for_matching(line)):
                     findings.append(finding("secret", file, number, match[0]))
     findings = [dict(items) for items in dict.fromkeys(tuple(f.items()) for f in findings)]
     findings.sort(key=lambda item: (item["file"], item["line"], item["rule"], item["fingerprint"]))

@@ -19,7 +19,7 @@ reviewed mode. Seeded drafts carry `<!-- arf:draft run=lint-fixture -->`.
 | ben-role | hard | Role wording: complete banned phrase list |
 | employer-mention | hard | Role wording: configured employer |
 | prepared-by | hard | Role wording: exact configured prepared-by text |
-| missing-draft-marker | hard | Draft-only / §6.2: run comment in md/html and bilingual HTML footer; shadow/reviewed unless --final |
+| missing-draft-marker | hard | Draft-only / §6.2: run comment in md/html, bilingual HTML footer and verifiable PDF marker; shadow/reviewed unless --final |
 | sent-status | hard | Draft-only: no sent/נשלח status lines |
 | recipient-email | hard | Draft-only: only configured Ben email on his contact line |
 | tracking-pixel | hard | No tracking: scripts, remote images, pixels, tracker media |
@@ -32,13 +32,20 @@ reviewed mode. Seeded drafts carry `<!-- arf:draft run=lint-fixture -->`.
 | missing-appendix | hard | Structure: appendix table with ≥3 data rows |
 | appendix-evidence | hard | Structure: each appendix row references a manifest file path |
 | israel-time | hard | Structure: time blocks labeled Israel time / שעון ישראל |
-| uncited-finding | hard | Evidence grounding: explicit report citations must exist; structured grounding deferred below |
+| uncited-finding | hard | Evidence grounding: explicit report citations must exist; structured evidence paths must exist and match any supplied manifest |
 | blocked-single-source | hard | Evidence grounding: ≥2 independent source aliases unless explicitly uncertain |
 | secret | hard | Secrets: credential prefixes, assignments, private keys, bearer tokens, ≥80-character base64 runs |
 | pdf-length | warning | Report longer than four PDF pages |
 | public-side-effect | warning, deferred | Recorded public side effect: no producer/record contract exists yet |
 
 `placeholder-left` was removed: it is not an LLD rule and required a golden ack.
+
+Matching uses NFKC, removes all Unicode Cf format characters and removes Hebrew
+Mn niqqud/cantillation in U+0591–U+05C7. Other combining marks are preserved.
+Semantic excerpts use this matching text, so invisible/fullwidth variants have
+stable fingerprints equivalent to their plain forms. Input hashes still cover
+the original bytes, and line numbers are preserved. Pricing phrases allow
+whitespace and English plurals (fees, discounts, retainers, hourly rates).
 
 ## Input contracts and skips
 
@@ -60,12 +67,28 @@ but no evidence.json or findings.json. Missing evidence.json skips appendix
 mapping and third-party host classification. Explicit local links in finding
 rows are still checked for missing/path-escaping evidence files.
 
-Structured findings grounding is deferred even if findings.json is supplied:
-neither the repository nor the golden bundle defines its schema. The file is
-parsed, hashed and scanned for secrets; the grounding skip explains this rather
-than inventing fields. Public-side-effect checks are also deferred: the request
+Neither the repository nor the golden bundle defines a findings schema. The
+minimal supported findings.json contract is
+`{"findings": [{"id": "finding-1", "evidence": ["probes.csv"]}]}`.
+IDs must be unique nonempty strings or integers. Every finding needs a list of
+string paths. An empty evidence list, a missing/outside-root file, or a path not
+listed in a supplied evidence.json is a hard `uncited-finding` failure. Without
+evidence.json, file existence and containment are still enforced; manifest
+membership cannot be checked. Unsupported shapes exit 2, never a passing skip.
+An empty findings list is valid. Referenced files are included in input hashes.
+Prose-to-evidence semantic verification remains outside this deterministic
+contract. Public-side-effect checks are deferred: the request
 model has allow_public_scan/ben_ok authorization fields, but no run event record
 format exists. Authorization alone is not evidence of a public side effect.
+
+An existing report.pdf in shadow/reviewed (unless --final) must contain the exact
+`טיוטה — לא לשליחה · DRAFT` marker in raw bytes or a zlib-decompressed FlateDecode
+stream. UTF-8, UTF-16BE and UTF-16LE are checked, with an 8 MiB decoded-stream
+limit. An absent/unreadable marker is a hard `missing-draft-marker` with a
+"could not be verified" message, not a skip. Volume remains marker-exempt.
+Full PDF text extraction, including CID fonts, would require a new dependency;
+none is added. Encoded glyph IDs, other filters and unreadable streams fail
+closed rather than being assumed safe.
 
 Missing report.pdf skips PDF length. An existing PDF is counted using
 `/Type /Page` objects; zero visible objects is an explicit skip (compressed object

@@ -2,6 +2,7 @@
 
 from html import unescape
 import re
+import unicodedata
 from urllib.parse import parse_qsl, urlsplit
 
 from .document import HTMLDocument, headings, plain, sections, tables
@@ -46,9 +47,9 @@ SOURCE_ALIASES = {
 CURRENCY = r"(?:₪|\$|€|£|NIS\b|ILS\b|USD\b|ש[\"״']ח)"
 AMOUNT = r"\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?"
 MONEY = re.compile(rf"(?:{AMOUNT}\s*{CURRENCY}|{CURRENCY}\s*{AMOUNT})", re.I)
-PRICING = re.compile(r"הצעת מחיר|תמחור|עלות השירות|מחירון|\b(?:price list|pricing|quote|fee|per hour|hourly rate|discount|retainer)\b", re.I)
+PRICING = re.compile(r"הצעת\s+מחיר|תמחור|עלות\s+השירות|מחירון|\b(?:price\s+lists?|pricing|quotes?|fees?|per\s+hour|hourly\s+rates?|discounts?|retainers?)\b", re.I)
 GENERIC_PRICE = re.compile(r"מחיר|\b(?:price|cost)\b", re.I)
-ROLE = re.compile(r"ראש\s+צוות(?:\s+פיתוח)?|מנהל\s+צוות\s+פיתוח|מנהל\s+פיתוח|\b(?:dev(?:elopment)?[\s-]+team[\s-]+manager|engineering[\s-]+manager|R&D[\s-]+manager|team[\s-]+lead)\b", re.I)
+ROLE = re.compile(r"ראש\s+צו{1,2}ת(?:\s+פי?תוח)?|מנהל\s+צו{1,2}ת\s+פי?תוח|מנהל\s+פי?תוח|\b(?:dev(?:elopment)?[\s-]+team[\s-]+manager|engineering[\s-]+manager|R&D[\s-]+manager|team[\s-]+lead)\b", re.I)
 IMPLEMENTATION = re.compile(r"<script\b|application/ld\+json|openingHoursSpecification|@type\b|Disallow:|User-agent:|\.htaccess\b|wp-config\b|add the following|הוסיפו את הקוד", re.I)
 SECRET = re.compile(
     r"\bAKIA[A-Z0-9]{16,}|\b(?:sk_live_|sk-)[A-Za-z0-9_-]{16,}"
@@ -66,8 +67,14 @@ BLOCKED = re.compile(r"חסום|נחסם|נחסמת|חסימה|\bblock(?:ed|ing)
 UNCERTAIN = re.compile(r"לא עקבי|אינה עקבית|לא הוכח|לא מוכח|לא הוכחה|not (?:consistent|proven)|inconsistent", re.I)
 
 
+def normalize_for_matching(text):
+    return "".join(char for char in unicodedata.normalize("NFKC", text)
+                   if unicodedata.category(char) != "Cf" and not (
+                       "\u0591" <= char <= "\u05c7" and unicodedata.category(char) == "Mn"))
+
+
 def host(url):
-    return (urlsplit(unescape(url)).hostname or "").lower().removeprefix("www.")
+    return (urlsplit(normalize_for_matching(unescape(url))).hostname or "").lower().removeprefix("www.")
 
 
 def tracker(url):
@@ -77,6 +84,9 @@ def tracker(url):
 
 
 def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_hosts=None):
+    content = normalize_for_matching(content)
+    if config:
+        config = {key: normalize_for_matching(value) for key, value in config.items()}
     findings = []
 
     def add(rule, line, excerpt):
@@ -87,7 +97,7 @@ def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_
     customer = file in {"report.md", "report.html"}
     if is_html:
         html.feed(content)
-    text = plain(html.text if is_html else content)
+    text = normalize_for_matching(plain(html.text if is_html else content))
     time_context = bool(re.search(r"כל הבדיקות:[^\n]*שעון ישראל|All (?:checks|times)[^\n]*Israel time", text, re.I))
     blocks = list(re.finditer(r"\S[^\n]*(?:\n(?!\s*\n)[^\n]*)*", text))
     section = ""
@@ -135,9 +145,10 @@ def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_
     if config and customer and (len(prepared) != 1 or prepared[0][1] != config["prepared_by"]):
         add("prepared-by", prepared[0][0] if prepared else 1, prepared[0][1] if prepared else "Missing prepared-by line")
     for number, raw in enumerate(content.splitlines(), 1):
-        for match in SECRET.finditer(raw):
+        decoded = normalize_for_matching(unescape(raw))
+        for match in SECRET.finditer(decoded):
             add("secret", number, match[0])
-        for match in URL.finditer(unescape(raw)):
+        for match in URL.finditer(decoded):
             url = match[0].rstrip(".,;")
             if any(key.lower().startswith("utm_") or key.lower() in {"gclid", "fbclid", "mc_eid", "msclkid"}
                    for key, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True)):
@@ -157,6 +168,7 @@ def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_
         for number, excerpt in html.code:
             add("code-block", number, excerpt)
     for number, tag, attrs, excerpt in html.media:
+        attrs = {key: normalize_for_matching(value) for key, value in attrs.items()}
         dimensions = {key: attrs.get(key, "") for key in ("width", "height")}
         for key, value in re.findall(r"(width|height)\s*:\s*([\d.]+(?:px)?)", attrs.get("style", ""), re.I):
             dimensions[key.lower()] = value
