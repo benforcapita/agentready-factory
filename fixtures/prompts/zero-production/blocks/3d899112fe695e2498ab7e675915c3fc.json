@@ -1,0 +1,40 @@
+{
+  "object": "list",
+  "has_more": false,
+  "results": [
+    {
+      "type": "paragraph",
+      "paragraph": {
+        "rich_text": [
+          {
+            "plain_text": "Fixture prompt for step judge, version 1 (production)."
+          }
+        ]
+      }
+    },
+    {
+      "type": "paragraph",
+      "paragraph": {
+        "rich_text": [
+          {
+            "plain_text": "Recorded test data only; "
+          },
+          {
+            "plain_text": "not a production prompt."
+          }
+        ]
+      }
+    },
+    {
+      "type": "code",
+      "code": {
+        "language": "plain text",
+        "rich_text": [
+          {
+            "plain_text": "Input: {evidence}\nOutput: JSON"
+          }
+        ]
+      }
+    }
+  ]
+}

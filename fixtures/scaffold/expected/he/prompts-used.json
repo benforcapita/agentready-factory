@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "run_id": "arf-example-com-20261120-1000-ab12",
+  "prompts": [
+    {
+      "step": "analyze",
+      "selected_by": "production",
+      "row_url": "https://www.notion.so/AgentReady-analyze-v2-98761e33b3065ecdb524d9c4ac4db90f",
+      "title": "AgentReady analyze v2",
+      "status": "production",
+      "version_id": "AgentReady report factory/analyze/v2",
+      "sha256": "c49c5dd376aaa44d2b1f4a1864b6fad34e1522030f9900c8a3de2b3b53e65341",
+      "text_file": "prompts/analyze.txt"
+    },
+    {
+      "step": "write-report",
+      "selected_by": "production",
+      "row_url": "https://www.notion.so/AgentReady-write-report-v2-be24aed9e16f5cdba005b2e769246e3a",
+      "title": "AgentReady write-report v2",
+      "status": "production",
+      "version_id": "AgentReady report factory/write-report/v2",
+      "sha256": "f4f3773c0e8e233169a6a963ccca62da5f99a1967037bdaebb6b345ad32b7770",
+      "text_file": "prompts/write-report.txt"
+    },
+    {
+      "step": "write-notes",
+      "selected_by": "production",
+      "row_url": "https://www.notion.so/AgentReady-write-notes-v1-e2488d9ec0e6598fb5cbffc6a2bc9b2d",
+      "title": "AgentReady write-notes v1",
+      "status": "production",
+      "version_id": "AgentReady report factory/write-notes/v1",
+      "sha256": "79cfc508934a15d7f7d6ee1ec51633e7755ff9ab300d297d702f7332d7474e0e",
+      "text_file": "prompts/write-notes.txt"
+    },
+    {
+      "step": "judge",
+      "selected_by": "production",
+      "row_url": "https://www.notion.so/AgentReady-judge-v1-3d899112fe695e2498ab7e675915c3fc",
+      "title": "AgentReady judge v1",
+      "status": "production",
+      "version_id": "AgentReady report factory/judge/v1",
+      "sha256": "505982870e51ceb62687df8c88cc62c750fc560208e0373ae983f77eb6c2c8cb",
+      "text_file": "prompts/judge.txt"
+    }
+  ]
+}

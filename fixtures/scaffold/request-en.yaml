@@ -1,0 +1,23 @@
+version: 1
+trigger: musy_lead
+site: https://example.com
+business_name: Example Bakery
+contact:
+  name: Example Contact
+  role: Marketing
+language: en
+mode: shadow
+musy:
+  message_id: "10001"
+  thread_id: 00000000-0000-4000-8000-000000000001
+  received_at: 2026-11-20T09:58:00+02:00
+  scores: {agent_ready: 30, poppy: 0}
+  scan_date: 2026-11-20
+  claimed_gaps: [llms.txt missing, no ai-catalog.json]
+allow_public_scan: false
+ben_ok: null
+prompt_overrides:
+  analyze: https://www.notion.so/AgentReady-analyze-v3-3fecd12e056c55f6bd08f2801d35f1e6
+force: false
+requested_by: chief-of-staff
+reply_ticket: PRO-xxx

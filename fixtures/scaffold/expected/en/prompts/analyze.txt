@@ -1,0 +1,4 @@
+Fixture prompt for step analyze, version 3 (testing).
+Recorded test data only; not a production prompt.
+Input: {evidence}
+Output: JSON

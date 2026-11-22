@@ -1,0 +1,4 @@
+Fixture prompt for step write-report, version 2 (production).
+Recorded test data only; not a production prompt.
+Input: {evidence}
+Output: JSON
