@@ -1,6 +1,7 @@
 """The arf command-line interface."""
 
 import argparse
+from importlib import import_module
 from pathlib import Path
 import sys
 
@@ -10,6 +11,12 @@ from .notion import check_recorded, report
 from .request import PHASES
 from .validation import InvalidRequest, validate_request
 
+
+DELEGATED = {
+    "scaffold": "arf.scaffold.__main__",
+    "render": "arf.render.__main__",
+    "lint": "arf.lint.__main__",
+}
 
 STUBS = {
     "collect": "Collect evidence",
@@ -22,6 +29,10 @@ STUBS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] in DELEGATED:
+        return import_module(DELEGATED[argv[0]]).main(argv[1:])
+
     parser = argparse.ArgumentParser(prog="arf", description="AgentReady report factory")
     commands = parser.add_subparsers(dest="command", required=True)
 
