@@ -2,8 +2,8 @@
 
 Command-line tools for the AgentReady report factory. `arf validate` reads a
 request YAML file. `arf collect` collects passive HTTP evidence. `arf notion check-schema` checks
-Notion schemas. The `scaffold`, `render`, `lint`, and `replay` commands are
-placeholders.
+Notion schemas. `arf scaffold`, `arf render` and `arf lint` write, render and
+check report drafts. The `replay` command is a placeholder.
 
 ## Setup
 
@@ -41,6 +41,18 @@ are interpreted relative to the request file).
 `allow_public_scan` defaults to `false`. To request a public scan, include Ben's
 timestamped approval for this run as text in `ben_ok`. Validation checks that the
 text is present.
+
+## Scaffold, render and lint
+
+```sh
+arf scaffold fixtures/scaffold/request-he.yaml --out runs/example --run-id arf-example-com-20261120-1000-ab12 --prompts fixtures/prompts/recorded
+arf render fixtures/golden/lehamim/report.md --out out/shadow --run-id ci-shadow
+arf lint fixtures/golden/lehamim --final --ack fixtures/lint/lehamim/lint-ack.json --out out/lehamim-lint.json
+```
+
+These subcommands run the `python -m arf.scaffold`, `python -m arf.render` and
+`python -m arf.lint` entry points with the same flags, output and exit codes.
+Run `arf <command> --help` for the flags.
 
 ## Collect
 
