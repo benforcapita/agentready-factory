@@ -105,6 +105,20 @@ class ValidateTests(unittest.TestCase):
                     self.request["site"] = f"https://[{host}]"
                     self.assert_rejected("site: host must be public")
 
+    def test_rejects_teredo_literals_before_checking_is_global(self):
+        with patch.object(IPv6Address, "is_global", new_callable=PropertyMock) as is_global:
+            is_global.side_effect = AssertionError("Teredo must not consult IPv6Address.is_global")
+            for host in [
+                "2001:0:4136:e378:8000:63bf:f7f7:f7f7",
+                "2001:0:7f00:1:0:ffff:a247:27dd",
+                "2001:0:5db8:d822:0:ffff:80ff:fffe",
+                "2001::",
+                "2001:0:ffff:ffff:ffff:ffff:ffff:ffff",
+            ]:
+                with self.subTest(host=host):
+                    self.request["site"] = f"https://[{host}]"
+                    self.assert_rejected("site: host must be public")
+
     def test_rejects_non_public_embedded_ipv4_ranges(self):
         for ipv4 in [
             "0.0.0.0", "10.0.0.1", "100.64.0.1", "127.0.0.1",
@@ -143,7 +157,10 @@ class ValidateTests(unittest.TestCase):
                 self.resolve.assert_not_called()
 
     def test_rejects_non_public_ipv6_resolver_answers(self):
-        for host in ["::ffff:0:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::"]:
+        for host in [
+            "::ffff:0:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::",
+            "2001:0:4136:e378:8000:63bf:f7f7:f7f7",
+        ]:
             with self.subTest(host=host):
                 self.resolve.return_value = [
                     (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (host, 0, 0, 0)),
