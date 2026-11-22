@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "acks": [
+    {
+      "rule": "placeholder-left",
+      "file": "notes-for-ben.md",
+      "fingerprint": "3468061411e62bb5",
+      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "file": "notes-for-ben.md",
+      "fingerprint": "83897681178fcd56",
+      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "file": "report.html",
+      "fingerprint": "9f14cb4d8da21edc",
+      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "file": "report.md",
+      "fingerprint": "c726e634e4add7dc",
+      "reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "uncited-finding",
+      "file": "report.md",
+      "fingerprint": "96f9c0483b2838a5",
+      "reason": "Golden narrative finding retained verbatim; supporting structured-data observations appear in the appendix and private notes."
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "phase": "reviewed",
+  "inputs": [
+    {
+      "file": "notes-for-ben.md",
+      "sha256": "a7b28bf2e96eb4851736acd8827bb45402f989166feb8d264a09938ee35d75e5"
+    },
+    {
+      "file": "report.html",
+      "sha256": "411a1f9cc45bb5547903183c31cbf374f17687c9e8878e5472763a777d9f7aba"
+    },
+    {
+      "file": "report.md",
+      "sha256": "bc5cc08c2c31154a3680f9bf3a85a729785e08e8f2c150359f7bd60911b31ca7"
+    }
+  ],
+  "findings": [
+    {
+      "rule": "placeholder-left",
+      "level": "warning",
+      "file": "notes-for-ben.md",
+      "line": 1,
+      "excerpt": "[CONTACT_NAME]",
+      "message": "Fill or explicitly acknowledge this placeholder.",
+      "fingerprint": "3468061411e62bb5",
+      "acknowledged": true,
+      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "level": "warning",
+      "file": "notes-for-ben.md",
+      "line": 2,
+      "excerpt": "[MEETING_LINK]",
+      "message": "Fill or explicitly acknowledge this placeholder.",
+      "fingerprint": "83897681178fcd56",
+      "acknowledged": true,
+      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "level": "warning",
+      "file": "notes-for-ben.md",
+      "line": 13,
+      "excerpt": "[CONTACT_NAME]",
+      "message": "Fill or explicitly acknowledge this placeholder.",
+      "fingerprint": "3468061411e62bb5",
+      "acknowledged": true,
+      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "level": "warning",
+      "file": "report.html",
+      "line": 25,
+      "excerpt": "[CONTACT_NAME]",
+      "message": "Fill or explicitly acknowledge this placeholder.",
+      "fingerprint": "9f14cb4d8da21edc",
+      "acknowledged": true,
+      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "placeholder-left",
+      "level": "warning",
+      "file": "report.md",
+      "line": 3,
+      "excerpt": "[CONTACT_NAME]",
+      "message": "Fill or explicitly acknowledge this placeholder.",
+      "fingerprint": "c726e634e4add7dc",
+      "acknowledged": true,
+      "ack_reason": "Sanitized golden fixture deliberately retains contact and meeting placeholders; fill before sending."
+    },
+    {
+      "rule": "uncited-finding",
+      "level": "warning",
+      "file": "report.md",
+      "line": 33,
+      "excerpt": "| 2 | **אין \"תעודת זהות\" מובנית לעסק.** בעמוד הבית, בדף ההזמנות ובדף סניף לדוגמה יש נתונים מובנים כלליים בלבד (WebPage, ‏WebSite). אין הגדרה של לחמים כמאפייה או כעסק מקומי, ואין סניפים, שעות פתיחה או טלפון בפורמט שמכונה מזהה. | עוזר AI צריך \"לנחש\" מהטקסט מתי פתוח ואיפה. ניחוש כזה עלול להוביל לתשובה שגויה ללקוח, למשל על שעות שישי או ערבי חג. |",
+      "message": "Cite a source for this finding.",
+      "fingerprint": "96f9c0483b2838a5",
+      "acknowledged": true,
+      "ack_reason": "Golden narrative finding retained verbatim; supporting structured-data observations appear in the appendix and private notes."
+    }
+  ],
+  "unused_acks": [],
+  "summary": {
+    "hard_fail": 0,
+    "warning": 6,
+    "acknowledged": 6,
+    "unacknowledged_warning": 0
+  },
+  "passed": true
+}
