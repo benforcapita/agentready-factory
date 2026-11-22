@@ -17,6 +17,8 @@ DISCOVERY_PATHS = (
     "/.well-known/security.txt", "/sitemap_index.xml", "/.well-known/ai-plugin.json",
 )
 TIMEOUT = 10
-MAX_REQUESTS_PER_HOST = 60
+MAX_REQUESTS = 100
+FAKE_IP_POLICY = "refuse"
+DOH_ENDPOINT = "https://cloudflare-dns.com/dns-query"
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_REDIRECTS = 3

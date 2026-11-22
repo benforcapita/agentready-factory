@@ -8,15 +8,21 @@
     "shop.example",
     "www.shop.example"
   ],
-  "started_at": "2026-11-22T06:50:11.328196+02:00",
-  "finished_at": "2026-11-22T06:50:11.433790+02:00",
+  "started_at": "2026-11-22T07:13:00.231433+02:00",
+  "finished_at": "2026-11-22T07:13:00.313891+02:00",
+  "requests_made": 82,
+  "max_requests": 100,
   "request_count": {
     "total": 82,
     "per_host": {
       "shop.example": 41,
       "www.shop.example": 41
-    }
+    },
+    "requests_made": 82,
+    "max_requests": 100
   },
+  "fake_ip_policy": "refuse",
+  "doh_answers": {},
   "config": {
     "identities": {
       "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -43,7 +49,9 @@
       "/.well-known/ai-plugin.json"
     ],
     "timeout": 10,
-    "cap_per_host": 60,
+    "max_requests": 100,
+    "fake_ip_policy": "refuse",
+    "doh_endpoint": "https://cloudflare-dns.com/dns-query",
     "max_body_bytes": 2097152,
     "max_redirects": 3
   },
@@ -51,7 +59,7 @@
     {
       "path": "discovery.csv",
       "bytes": 1201,
-      "sha256": "bb816697296ee6de982bd9a90653023ac2ecd07eb580eb2b452e57b02b9491c7"
+      "sha256": "fd79f2d70e9201daf8f8baace331f108b776b2ab7a32332da562609cae0af7b0"
     },
     {
       "path": "discovery/0-0-0.body",

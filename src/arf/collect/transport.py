@@ -18,7 +18,7 @@ from ..validation import (
 
 
 class Refused(ValueError):
-    """An unsafe target or exhausted request budget."""
+    """An unsafe target or unverifiable egress."""
 
 
 @dataclass
@@ -63,13 +63,19 @@ def target(url, policy):
 
 
 class PinnedHTTPConnection(http.client.HTTPConnection):
-    def __init__(self, host, port, *, resolver, policy, timeout, deadline=None):
+    def __init__(self, host, port, *, resolver, policy, timeout, deadline=None,
+                 fake_ip_policy="refuse", doh_endpoint=None, doh_resolver=None,
+                 doh_answers=None):
         super().__init__(host, port, timeout=timeout)
         self.resolver = resolver
         self.policy = policy
         self.deadline = deadline
         self.expired = Event()
         self.active_socket = None
+        self.fake_ip_policy = fake_ip_policy
+        self.doh_endpoint = doh_endpoint
+        self.doh_resolver = doh_resolver
+        self.doh_answers = doh_answers if doh_answers is not None else {}
 
     def remaining(self):
         remaining = self.timeout if self.deadline is None else self.deadline - monotonic()
@@ -86,14 +92,12 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
             except OSError:
                 pass
 
-    def resolve(self):
-        if self.deadline is None:
-            return self.resolver(self.host, self.port, type=socket.SOCK_STREAM)
+    def bounded(self, callback):
         result = Queue(maxsize=1)
 
         def lookup():
             try:
-                result.put((self.resolver(self.host, self.port, type=socket.SOCK_STREAM), None))
+                result.put((callback(), None))
             except Exception as error:
                 result.put((None, error))
 
@@ -107,15 +111,41 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
             raise error
         return records
 
+    def resolve(self):
+        lookup = lambda: self.resolver(self.host, self.port, type=socket.SOCK_STREAM)
+        return lookup() if self.deadline is None else self.bounded(lookup)
+
+    def verify_doh(self):
+        try:
+            answers = self.bounded(lambda: self.doh_resolver(
+                self.host, endpoint=self.doh_endpoint, timeout=self.remaining()))
+            if not isinstance(answers, (list, tuple)) or not answers:
+                raise ValueError("no A/AAAA answers")
+            if any(not isinstance(answer, str) for answer in answers):
+                raise ValueError("malformed A/AAAA answer")
+            addresses = [ip_address(answer) for answer in answers]
+            checked = self.doh_answers.setdefault(self.host, [])
+            checked[:] = sorted(set(checked) | {str(address) for address in addresses})
+            if any(not is_public(address) or is_fake_ip(address) for address in addresses):
+                raise ValueError("DoH answers must all be public")
+            self.remaining()
+        except Exception as error:
+            raise Refused(f"{self.host}: DoH verification failed: {error}") from None
+
     def connect(self):
         records = self.resolve()
         if not records:
             raise Refused(f"could not resolve {self.host}")
-        for record in records:
-            address = ip_address(record[4][0])
-            if is_fake_ip(address):
+        addresses = [ip_address(record[4][0]) for record in records]
+        fake = [is_fake_ip(address) for address in addresses]
+        if any(fake):
+            if not all(fake):
+                raise Refused(f"{self.host}: mixed fake-IP and real DNS answers")
+            if self.fake_ip_policy != "doh_verify":
                 raise Refused(f"{self.host}: fake-IP answer; cannot verify real egress")
-            if not self.policy.allows(self.host, address):
+            self.verify_doh()
+        else:
+            if any(not self.policy.allows(self.host, address) for address in addresses):
                 raise Refused(f"{self.host}: DNS must resolve only to public addresses")
         last_error = None
         for family, socktype, proto, _, sockaddr in records:

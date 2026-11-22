@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from arf.cli import main
 from arf.collect import collect, config
+from arf.collect.doh import resolve_doh
 from arf.collect.transport import GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused
 from arf.validation import InvalidRequest
 from tests.collect_server import local_policy, resolve, server
@@ -21,6 +22,7 @@ from tests.collect_server import local_policy, resolve, server
 
 class CollectTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.dict("os.environ", {}, clear=True))
         self.directory = Path(self.enterContext(TemporaryDirectory()))
         self.out = self.directory / "bundle"
         self.instance = self.enterContext(server())
@@ -47,7 +49,9 @@ class CollectTests(unittest.TestCase):
         self.assertNotIn("/never-follow-probe", self.instance.paths)
         self.assertEqual(manifest["request_count"]["per_host"], dict(self.instance.hits))
         self.assertEqual(manifest["request_count"]["total"], sum(self.instance.hits.values()))
-        self.assertTrue(all(count == 41 and count <= 60 for count in self.instance.hits.values()))
+        self.assertEqual(manifest["requests_made"], 82)
+        self.assertEqual(manifest["max_requests"], 100)
+        self.assertLessEqual(manifest["requests_made"], 100)
         for headers in self.instance.headers_seen:
             self.assertNotIn("Cookie", headers)
             self.assertNotIn("Authorization", headers)
@@ -62,10 +66,53 @@ class CollectTests(unittest.TestCase):
             self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest())
         self.assertEqual(json.loads((self.out / "evidence.json").read_text()), json.loads(json.dumps(manifest)))
 
-    def test_cap_stops_before_next_request(self):
-        with self.assertRaisesRegex(Refused, "cap"):
-            self.run_collect(cap=2)
-        self.assertEqual(sum(self.instance.hits.values()), 2)
+    def test_global_budget_preserves_rows_and_succeeds(self):
+        manifest = self.run_collect(max_requests=10)
+        self.assertEqual(sum(self.instance.hits.values()), 10)
+        self.assertEqual(manifest["requests_made"], 10)
+        self.assertEqual(manifest["max_requests"], 10)
+        with (self.out / "probes.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 72)
+        self.assertTrue(all(row["status"] != "skipped_budget" for row in rows[:10]))
+        self.assertEqual({row["status"] for row in rows[10:]}, {"skipped_budget"})
+        with (self.out / "discovery.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 10)
+        self.assertEqual({row["status"] for row in rows}, {"skipped_budget"})
+        self.assertEqual(json.loads((self.out / "errors.json").read_text()), [])
+
+    def test_global_budget_counts_redirect_hops(self):
+        self.instance.redirect = "/llms-full.txt"
+        manifest = self.run_collect(max_requests=75)
+        self.assertEqual(manifest["requests_made"], 75)
+        self.assertEqual(sum(self.instance.hits.values()), 75)
+        with (self.out / "discovery.csv").open() as stream:
+            self.assertIn("skipped_budget", {row["status"] for row in csv.DictReader(stream)})
+
+    def test_environment_defaults_and_explicit_overrides(self):
+        with patch.dict("os.environ", {"ARF_MAX_REQUESTS": "0", "ARF_FAKE_IP_POLICY": "doh_verify",
+                                       "ARF_DOH_ENDPOINT": "https://resolver.example/query"}):
+            manifest = self.run_collect()
+            self.assertEqual(manifest["requests_made"], 0)
+            self.assertEqual(manifest["fake_ip_policy"], "doh_verify")
+            self.assertEqual(manifest["config"]["doh_endpoint"], "https://resolver.example/query")
+            self.out = self.directory / "override"
+            manifest = self.run_collect(max_requests=1, fake_ip_policy="refuse",
+                                        doh_endpoint=config.DOH_ENDPOINT)
+            self.assertEqual(manifest["requests_made"], 1)
+            self.assertEqual(manifest["fake_ip_policy"], "refuse")
+            self.assertEqual(manifest["config"]["doh_endpoint"], config.DOH_ENDPOINT)
+
+    def test_invalid_configuration(self):
+        for kwargs in ({"max_requests": -1}, {"max_requests": "ten"}, {"max_requests": True},
+                       {"fake_ip_policy": "allow"}, {"doh_endpoint": "http://resolver.example/"}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                self.run_collect(**kwargs)
+        with patch.dict("os.environ", {"ARF_MAX_REQUESTS": "ten"}):
+            with self.assertRaisesRegex(ValueError, "ARF_MAX_REQUESTS"):
+                self.run_collect()
+        self.assertEqual(sum(self.instance.hits.values()), 0)
 
     def test_nonempty_refused(self):
         self.out.mkdir()
@@ -119,7 +166,7 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(sum(self.instance.hits.values()), 0)
 
     def test_discovery_redirect_guards(self):
-        for destination in ("http://127.0.0.1/", "http://private.example/", "file:///etc/passwd"):
+        for destination in ("http://127.0.0.1/", "http://private.example/", "file:///etc/passwd", "http://[::1/"):
             with self.subTest(destination=destination), TemporaryDirectory() as directory:
                 self.out = Path(directory) / "bundle"
                 self.instance.redirect = destination
@@ -128,9 +175,33 @@ class CollectTests(unittest.TestCase):
                         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", port))]
                     return resolve(host, port, **kwargs)
                 before = sum(self.instance.hits.values())
-                with self.assertRaises(Refused):
+                with self.assertRaisesRegex(OSError, "errors.json"):
                     self.run_collect(resolver=resolving)
-                self.assertEqual(sum(self.instance.hits.values()) - before, 74)
+                self.assertEqual(sum(self.instance.hits.values()) - before, 82)
+                errors = json.loads((self.out / "errors.json").read_text())
+                self.assertEqual(len(errors), 2)
+                expected = "error" if destination == "http://[::1/" else "refused"
+                self.assertEqual({error["status"] for error in errors}, {expected})
+                with (self.out / "discovery.csv").open() as stream:
+                    rows = list(csv.DictReader(stream))
+                self.assertEqual(sum(row["status"] == expected for row in rows), 2)
+                self.assertEqual(rows[-1]["status"], "200")
+
+    def test_public_ip_literals_have_no_www_variant(self):
+        for literal, host in (("93.184.216.34", "93.184.216.34"),
+                              ("0x5db8d822", "93.184.216.34"),
+                              ("[2001:4860:4860::8888]", "2001:4860:4860::8888")):
+            with self.subTest(literal=literal), TemporaryDirectory() as directory:
+                out = Path(directory) / "bundle"
+                manifest = collect(f"https://{literal}", out, resolver=resolve, scheme="http",
+                                   port=self.instance.server_port,
+                                   policy=GuardPolicy({host: ("127.0.0.1/32",)}))
+                self.assertEqual(manifest["hosts"], [host])
+                self.assertEqual(manifest["requests_made"], 41)
+                with (out / "probes.csv").open() as stream:
+                    rows = list(csv.DictReader(stream))
+                self.assertEqual(len(rows), 36)
+                self.assertEqual({row["domain"] for row in rows}, {host})
 
     def test_discovery_follows_three_redirects_and_counts_each(self):
         self.instance.redirect = "/llms-full.txt"
@@ -200,6 +271,148 @@ class CollectTests(unittest.TestCase):
             make_socket.return_value.connect.assert_called_once_with(("93.184.216.34", 443))
             context.return_value.wrap_socket.assert_called_once_with(make_socket.return_value, server_hostname="shop.example")
             connection.close()
+
+    def test_fake_ip_verification_failures_never_connect(self):
+        fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 80))]
+        cases = [
+            ("refuse", ["93.184.216.34"], fake),
+            ("doh_verify", ["127.0.0.1"], fake),
+            ("doh_verify", ["10.0.0.1"], fake),
+            ("doh_verify", ["93.184.216.34", "10.0.0.1"], fake),
+            ("doh_verify", ["::ffff:127.0.0.1"], fake),
+            ("doh_verify", [], fake),
+            ("doh_verify", ["not-an-ip"], fake),
+            ("doh_verify", "93.184.216.34", fake),
+            ("doh_verify", OSError("DoH offline"), fake),
+            ("doh_verify", TimeoutError("timeout"), fake),
+            ("doh_verify", ["93.184.216.34"], fake + [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))]),
+        ]
+        for mode, answers, records in cases:
+            with self.subTest(mode=mode, answers=answers), patch("arf.collect.transport.socket.socket") as sock:
+                doh = Mock(side_effect=answers) if isinstance(answers, Exception) else Mock(return_value=answers)
+                connection = PinnedHTTPConnection("shop.example", 80, resolver=Mock(return_value=records),
+                    policy=GuardPolicy(), timeout=1, fake_ip_policy=mode,
+                    doh_endpoint=config.DOH_ENDPOINT, doh_resolver=doh)
+                with self.assertRaises(Refused):
+                    connection.connect()
+                sock.assert_not_called()
+                if mode == "refuse" or len(records) > 1:
+                    doh.assert_not_called()
+
+    def test_fake_ip_doh_deadline_refuses_before_connect(self):
+        def slow_doh(*args, **kwargs):
+            sleep(0.2)
+            return ["93.184.216.34"]
+
+        with patch("arf.collect.transport.socket.socket") as sock:
+            connection = PinnedHTTPConnection("shop.example", 80,
+                resolver=Mock(return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 80))]),
+                policy=GuardPolicy(), timeout=0.03, deadline=monotonic() + 0.03,
+                fake_ip_policy="doh_verify", doh_endpoint=config.DOH_ENDPOINT, doh_resolver=slow_doh)
+            started = monotonic()
+            with self.assertRaisesRegex(Refused, "DoH verification failed: timeout"):
+                connection.connect()
+            self.assertLess(monotonic() - started, 0.15)
+            sock.assert_not_called()
+
+    def test_fake_ip_doh_public_answers_pin_proxy_and_record_manifest(self):
+        connects = []
+
+        class ProxySocket(socket.socket):
+            def connect(proxy, address):
+                connects.append(address)
+                return super().connect(("127.0.0.1", address[1]))
+
+        def fake_resolve(host, port, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", port))]
+
+        doh = Mock(return_value=["93.184.216.34", "2606:4700:4700::1111"])
+        with patch("arf.collect.transport.socket.socket", ProxySocket):
+            manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(),
+                                        fake_ip_policy="doh_verify", doh_resolver=doh)
+        self.assertEqual(len(connects), 82)
+        self.assertTrue(all(address[0] == "198.18.0.1" for address in connects))
+        self.assertEqual(sum(self.instance.hits.values()), 82)
+        self.assertEqual(doh.call_count, 82)
+        self.assertEqual(manifest["fake_ip_policy"], "doh_verify")
+        expected = {host: sorted(doh.return_value) for host in ("shop.example", "www.shop.example")}
+        self.assertEqual(manifest["doh_answers"], expected)
+        self.assertEqual(json.loads((self.out / "evidence.json").read_text())["doh_answers"], expected)
+
+    def test_redirect_fake_ip_is_doh_checked_and_failure_continues(self):
+        class ProxySocket(socket.socket):
+            def connect(proxy, address):
+                if address[0] == "198.18.0.1":
+                    address = ("127.0.0.1", address[1])
+                return super().connect(address)
+
+        def resolving(host, port, **kwargs):
+            if host == "redirect.example":
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", port))]
+            return resolve(host, port, **kwargs)
+
+        self.instance.redirect = f"http://redirect.example:{self.instance.server_port}/landing"
+        for answer in ("93.184.216.34", "10.0.0.1"):
+            with self.subTest(answer=answer), TemporaryDirectory() as directory:
+                self.out = Path(directory) / "bundle"
+                doh = Mock(return_value=[answer])
+                with patch("arf.collect.transport.socket.socket", ProxySocket):
+                    if answer == "10.0.0.1":
+                        with self.assertRaisesRegex(OSError, "errors.json"):
+                            self.run_collect(resolver=resolving, fake_ip_policy="doh_verify", doh_resolver=doh)
+                    else:
+                        self.run_collect(resolver=resolving, fake_ip_policy="doh_verify", doh_resolver=doh)
+                self.assertEqual(doh.call_count, 2)
+                self.assertTrue(all(call.args[0] == "redirect.example" for call in doh.call_args_list))
+                manifest = json.loads((self.out / "evidence.json").read_text())
+                self.assertEqual(manifest["doh_answers"], {"redirect.example": [answer]})
+                self.assertEqual(manifest["requests_made"], 82 if answer == "10.0.0.1" else 84)
+
+
+class DoHJSONTests(unittest.TestCase):
+    def resolve(self, payloads, status=200):
+        responses = []
+        for payload in payloads:
+            response = Mock(status=status)
+            body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+            response.read1.side_effect = [body, b""]
+            responses.append(response)
+        with patch("arf.collect.doh.http.client.HTTPSConnection") as https:
+            https.return_value.getresponse.side_effect = responses
+            answers = resolve_doh("shop.example", endpoint=config.DOH_ENDPOINT, timeout=1)
+        return answers, https
+
+    def test_queries_both_types_over_verified_https(self):
+        answers, https = self.resolve([
+            {"Status": 0, "Answer": [{"type": 1, "data": "93.184.216.34"}]},
+            {"Status": 0, "Answer": [{"type": 28, "data": "2606:4700:4700::1111"}]},
+        ])
+        self.assertEqual(answers, ["93.184.216.34", "2606:4700:4700::1111"])
+        calls = https.return_value.request.call_args_list
+        self.assertIn("type=A", calls[0].args[1])
+        self.assertIn("type=AAAA", calls[1].args[1])
+        for call in calls:
+            self.assertIn("name=shop.example", call.args[1])
+            self.assertEqual(call.kwargs["headers"], {"Accept": "application/dns-json"})
+        context = https.call_args.kwargs["context"]
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, 2)
+
+    def test_empty_answer_set(self):
+        answers, _ = self.resolve([{"Status": 0}, {"Status": 0, "Answer": []}])
+        self.assertEqual(answers, [])
+
+    def test_malformed_and_failed_responses(self):
+        for payload in (b"not-json", [], {"Status": 3}, {"Status": True},
+                        {"Status": 0, "TC": True}, {"Status": 0, "Answer": {}},
+                        {"Status": 0, "Answer": ["bad"]},
+                        {"Status": 0, "Answer": [{"type": 1, "data": "::1"}]},
+                        {"Status": 0, "Answer": [{"type": 1, "data": "garbage"}]}):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                self.resolve([payload])
+        with self.assertRaisesRegex(ValueError, "HTTP status"):
+            self.resolve([{}], status=302)
 
 
 class CollectCLITests(unittest.TestCase):
