@@ -175,6 +175,10 @@ def hebrew_pattern(phrase):
     prefix_chars = "".join(sorted(prefix_chars))
     variants = {tuple(words)}
     for index, word in enumerate(words):
+        if index < len(words) - 1 and word.endswith("ת") and not word.endswith("ות"):
+            changed = words.copy()
+            changed[index] = word[:-1] + "ות"
+            variants.add(tuple(changed))
         if word.endswith("י"):
             continue
         for suffix in HEBREW_SUFFIXES[1:]:
@@ -206,6 +210,8 @@ def hebrew_pattern(phrase):
                     token.append(re.escape(char))
                 else:
                     token.append("(?:" + "|".join(re.escape(alias) for alias in sorted(aliases)) + ")")
+            if index and word.startswith("ה") and len(key) > 2:
+                token[0] = "(?:" + token[0] + ")?"
             tokens.append(prefix + "".join(token))
         alternatives.append("".join(tokens))
     return re.compile("(?:" + "|".join(sorted(alternatives, key=lambda p: -len(p))) + ")")
