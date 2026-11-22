@@ -6,6 +6,7 @@ import sys
 
 from .collect import collect
 from .collect.transport import Refused
+from .notion import check_recorded, report
 from .request import PHASES
 from .validation import InvalidRequest, validate_request
 
@@ -39,6 +40,14 @@ def main(argv: list[str] | None = None) -> int:
             subcommand.add_argument("request", type=Path)
             subcommand.add_argument("--out", type=Path, required=True)
             subcommand.add_argument("--phase", choices=PHASES, default="shadow")
+        if command == "notion":
+            notion = subcommand.add_subparsers(dest="notion_command", required=True)
+            check_schema = notion.add_parser(
+                "check-schema", help="Check recorded Notion API responses against the schemas"
+            )
+            check_schema.add_argument(
+                "recorded", type=Path, help="Directory of recorded <key>.json responses"
+            )
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -52,6 +61,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Evidence collected in {args.out}")
         return 0
+    if args.command == "notion":
+        output, passed = report(check_recorded(args.recorded))
+        print(output, file=sys.stdout if passed else sys.stderr)
+        return 0 if passed else 1
     if args.command != "validate":
         print(f"arf {args.command}: not implemented", file=sys.stderr)
         return 1
