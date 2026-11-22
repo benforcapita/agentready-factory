@@ -1,10 +1,11 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from ipaddress import IPv6Address
 from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import yaml
 
@@ -79,7 +80,6 @@ class ValidateTests(unittest.TestCase):
             "64:ff9b::7f00:1",
             "64:ff9b:1::7f00:1",
             "64:ff9b:1:7f00:1::",
-            "2002:7f00:1::",
             "::1",
             "fe80::1",
             "fc00::1",
@@ -96,6 +96,14 @@ class ValidateTests(unittest.TestCase):
             with self.subTest(host=host):
                 self.request["site"] = f"https://[{host}]"
                 self.assert_rejected("site: host must be public")
+
+    def test_rejects_6to4_literals_before_checking_is_global(self):
+        with patch.object(IPv6Address, "is_global", new_callable=PropertyMock) as is_global:
+            is_global.side_effect = AssertionError("6to4 must not consult IPv6Address.is_global")
+            for host in ["2002:808:808::", "2002:7f00:1::"]:
+                with self.subTest(host=host):
+                    self.request["site"] = f"https://[{host}]"
+                    self.assert_rejected("site: host must be public")
 
     def test_rejects_non_public_embedded_ipv4_ranges(self):
         for ipv4 in [
