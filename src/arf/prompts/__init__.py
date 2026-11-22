@@ -110,7 +110,7 @@ class RecordedPromptVersions:
         return id_
 
     def _body(self, page_id_: str) -> str:
-        blocks_dir = (self.root / "blocks").resolve()
+        blocks_dir = self.root.resolve() / "blocks"
         path = (blocks_dir / f"{page_id_}.json").resolve()
         if not path.is_relative_to(blocks_dir):
             raise PromptSelectionError(f"recorded prompt body for {page_id_} resolves outside blocks/: {path}")

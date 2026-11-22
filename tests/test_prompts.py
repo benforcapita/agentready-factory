@@ -204,6 +204,19 @@ class RecordedRowIdTest(unittest.TestCase):
         self.assertIn("resolves outside blocks/", stderr)
         self.assertFalse(out.exists())
 
+    def test_blocks_directory_symlinked_out_of_tree(self):
+        outside = self.root.parent / "outside_blocks"
+        (self.root / "blocks").rename(outside)
+        (outside / "3d899112fe695e2498ab7e675915c3fc.json").write_text(self.evil.read_text())
+        (self.root / "blocks").symlink_to("../outside_blocks", target_is_directory=True)
+        with self.assertRaisesRegex(PromptSelectionError, "[0-9a-f]{32} resolves outside blocks/"):
+            select_prompts(RecordedPromptVersions(self.root))
+        code, stderr, out = self.run_scaffold()
+        self.assertEqual(code, 1)
+        self.assertIn("resolves outside blocks/", stderr)
+        self.assertNotIn("EVIL", stderr)
+        self.assertFalse(out.exists())
+
     def test_dashed_and_undashed_ids_are_accepted(self):
         self.set_judge_id(JUDGE_PRODUCTION.replace("-", ""))
         selected = select_prompts(RecordedPromptVersions(self.root))
