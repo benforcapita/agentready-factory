@@ -811,24 +811,25 @@ class RenderThenLintTests(unittest.TestCase):
                 with self.subTest(case=case["id"]):
                     draft = GOOD.replace(self.PLACEHOLDER[case["section"]], case["probe"])
                     (root / "report.md").write_text(draft, encoding="utf-8")
-                    before, source = self.run_lint(root, "--source-only")
-                    self.assertEqual(before, case["source_only"], source)
-                    self.assertIn("render-then-lint", {s["check"] for s in source["skipped_checks"]})
+                    _, source = self.run_lint(root, "--source-only")
+                    self.assertIn("render-then-lint", {s["rule"] for s in source["skipped_checks"]})
+                    source_hard = {f["rule"] for f in source["findings"] if f["level"] == "hard_fail"}
                     after, result = self.run_lint(root)
-                    self.assertNotIn("render-then-lint", {s["check"] for s in result["skipped_checks"]})
+                    self.assertNotIn("render-then-lint", {s["rule"] for s in result["skipped_checks"]})
                     hard = {f["rule"] for f in result["findings"] if f["level"] == "hard_fail"}
                     views = dict(render_views(draft))
                     if case["rule"] is None:
-                        self.assertEqual(after, 0, result)
-                        self.assertFalse(hard)
+                        self.assertFalse(source_hard | hard, result)
+                        self.assertFalse([f for f in result["findings"] if f["file"].startswith("rendered:")])
                         for text in views.values():
                             self.assertEqual(inspect_view(text), [])
                         continue
+                    self.assertEqual(source_hard, {case["rule"]} if case["source_hard"] else set(), source)
                     self.assertEqual(after, 1, result)
                     self.assertEqual(hard, {case["rule"]})
                     self.assertIn(case["rule"], {rule for rule, _, _ in inspect_view(views[case["view"]])})
-                    if case["source_only"] == 0:
-                        self.assertIn(case["view"], {f["file"] for f in result["findings"]})
+                    if not case["source_hard"]:
+                        self.assertIn(case["view"], {f["file"] for f in result["findings"] if f["rule"] == case["rule"]})
 
     def test_rendered_views_of_clean_drafts_pass(self):
         for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):

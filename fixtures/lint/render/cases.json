@@ -1,16 +1,16 @@
 {
-  "about": "PRO-561 render-then-lint fixtures. Each probe replaces the placeholder sentence of a section in the unit-test draft, is rendered by T5 and then linted. source_only is the exit code of the Markdown pre-check alone; rule is the hard fail the rendered view must report (null: must pass).",
+  "about": "PRO-561 render-then-lint fixtures. Each probe replaces the placeholder sentence of a section in the unit-test draft, is rendered by T5 and then linted. source_hard says whether the Markdown pre-check alone (--source-only) already hard-fails with that rule; rule is the hard fail the rendered view must report (null: must pass).",
   "cases": [
-    {"id": "B3-footnote-role", "section": "3", "probe": "הערה חשובה[^בן שימש כראש צוות פיתוח]", "source_only": 1, "rule": "ben-role", "view": "rendered:report.pdf"},
-    {"id": "B3-reflabel-role", "section": "3", "probe": "ראו [הערה][Ben is a dev team manager]", "source_only": 1, "rule": "ben-role", "view": "rendered:report.pdf"},
-    {"id": "B3-reflabel-pricing", "section": "3", "probe": "[x][price list]", "source_only": 1, "rule": "price-in-offer", "view": "rendered:report.pdf"},
-    {"id": "B3-reflabel-money", "section": "5", "probe": "[הערה][50 USD]", "source_only": 1, "rule": "price-in-offer", "view": "rendered:report.pdf"},
-    {"id": "B3-footnote-money", "section": "5", "probe": "הערה[^50 USD]", "source_only": 1, "rule": "price-in-offer", "view": "rendered:report.pdf"},
-    {"id": "N2-hidden-attribute", "section": "3", "probe": "<span hidden>Ben is a team leader</span>", "source_only": 0, "rule": "ben-role", "view": "rendered:report.html"},
-    {"id": "N2-display-none", "section": "3", "probe": "<span style=\"display:none\">price list</span>", "source_only": 0, "rule": "price-in-offer", "view": "rendered:report.html"},
-    {"id": "N2-visibility-hidden-money", "section": "5", "probe": "<span style=\"visibility:hidden\">50 USD</span>", "source_only": 0, "rule": "price-in-offer", "view": "rendered:report.html"},
-    {"id": "N2-html-comment", "section": "3", "probe": "Context <!-- tech lead --> here.", "source_only": 0, "rule": "ben-role", "view": "rendered:report.html"},
-    {"id": "N2-class-hidden-split", "section": "3", "probe": "<style>.h{display:none}</style>team<span class=\"h\">x</span> lead", "source_only": 0, "rule": "ben-role", "view": "rendered:report.pdf"},
-    {"id": "N2-hidden-innocuous", "section": "3", "probe": "Content.<span hidden>Internal note</span>", "source_only": 0, "rule": null, "view": null}
+    {"id": "B3-footnote-role", "section": "3", "probe": "הערה חשובה[^בן שימש כראש צוות פיתוח]", "source_hard": true, "rule": "ben-role", "view": "rendered:report.pdf"},
+    {"id": "B3-reflabel-role", "section": "3", "probe": "ראו [הערה][Ben is a dev team manager]", "source_hard": true, "rule": "ben-role", "view": "rendered:report.pdf"},
+    {"id": "B3-reflabel-pricing", "section": "3", "probe": "[x][price list]", "source_hard": true, "rule": "price-in-offer", "view": "rendered:report.pdf"},
+    {"id": "B3-reflabel-money", "section": "5", "probe": "[הערה][50 USD]", "source_hard": true, "rule": "price-in-offer", "view": "rendered:report.pdf"},
+    {"id": "B3-footnote-money", "section": "5", "probe": "הערה[^50 USD]", "source_hard": true, "rule": "price-in-offer", "view": "rendered:report.pdf"},
+    {"id": "N2-hidden-attribute", "section": "3", "probe": "<span hidden>Ben is a team leader</span>", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
+    {"id": "N2-display-none", "section": "3", "probe": "<span style=\"display:none\">price list</span>", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
+    {"id": "N2-visibility-hidden-money", "section": "5", "probe": "<span style=\"visibility:hidden\">50 USD</span>", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
+    {"id": "N2-html-comment", "section": "3", "probe": "Context <!-- tech lead --> here.", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
+    {"id": "N2-class-hidden-split", "section": "3", "probe": "<style>.h{display:none}</style>team<span class=\"h\">x</span> lead", "source_hard": false, "rule": "ben-role", "view": "rendered:report.pdf"},
+    {"id": "N2-hidden-innocuous", "section": "3", "probe": "Content.<span hidden>Internal note</span>", "source_hard": false, "rule": null, "view": null}
   ]
 }
