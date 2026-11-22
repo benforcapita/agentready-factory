@@ -304,6 +304,51 @@ class RunTests(unittest.TestCase):
         with self.assertRaises(IllegalTransition):
             orchestrator.execute(submission.task.id)
 
+    def test_cancel_duplicate_writes_nothing(self):
+        orchestrator = self.orchestrator(FakeSteps())
+        first = orchestrator.submit(request())
+        orchestrator.submit(request())
+        duplicate = next(t for t in self.store.tasks.values() if t.duplicate_of == first.task.id)
+        writes = len(self.store.log)
+        with self.assertRaises(IllegalTransition):
+            orchestrator.cancel(duplicate.id)
+        self.assertEqual(len(self.store.log), writes)
+        self.assertEqual(self.store.tasks[first.task.id].status, "Requested")
+        self.assertEqual(self.store.runs[first.run.id].status, "queued")
+        self.assertEqual(orchestrator.execute(first.task.id).status, "Needs review")
+        again = orchestrator.submit(request())
+        self.assertEqual((again.reused, again.run.status), (True, "succeeded"))
+
+    def test_stop_states_are_not_cancellable(self):
+        for steps in (FakeSteps([False]), FakeSteps(fail_at="collect")):
+            store = MemoryStore()
+            orchestrator = Orchestrator(store, steps, clock=lambda: NOW)
+            submission = orchestrator.submit(request())
+            task = orchestrator.execute(submission.task.id)
+            writes = len(store.log)
+            with self.subTest(status=task.status), self.assertRaises(IllegalTransition):
+                orchestrator.cancel(task.id)
+            self.assertEqual(len(store.log), writes)
+            self.assertEqual(store.tasks[task.id].status, task.status)
+
+    def test_forced_retry_uses_forced_request_and_task_mode(self):
+        seen = []
+
+        class Recording(FakeSteps):
+            def collect(self, context):
+                seen.append((context.request.force, context.request.mode))
+                super().collect(context)
+
+        steps = Recording([False])
+        orchestrator = self.orchestrator(steps)
+        first = orchestrator.submit(request())
+        orchestrator.execute(first.task.id)
+        steps.results = [True]
+        retry = orchestrator.submit(request(force=True, mode="reviewed"))
+        self.assertEqual(retry.run.mode, "shadow")
+        orchestrator.execute(retry.task.id)
+        self.assertEqual(seen, [(False, "shadow"), (True, "reviewed")])
+
     def test_writes_match_notion_schema(self):
         orchestrator = self.orchestrator(FakeSteps([False]))
         submission = orchestrator.submit(request())

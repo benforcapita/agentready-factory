@@ -314,9 +314,11 @@ class Orchestrator:
         return Submission(task, run, retried=True)
 
     def cancel(self, task_id: str) -> Task:
+        """Cancel an active Task and its own open Run; illegal cancels write nothing."""
         task = self.store.tasks[task_id]
+        check_transition("task", task.status, "Cancelled")
         run = self.store.runs.get(task.latest_run or "")
-        if run is not None and not run.is_finished:
+        if run is not None and run.task == task_id and not run.is_finished:
             self.store.update_run(run.id, status="cancelled", finished=self.clock())
         return self.store.update_task(task_id, status="Cancelled")
 
