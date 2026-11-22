@@ -1,9 +1,10 @@
 """Load and validate a request without fetching its site."""
 
-from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_address
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
 from pathlib import Path
 import re
 import socket
+import unicodedata
 from urllib.parse import urlsplit
 
 import yaml
@@ -39,14 +40,23 @@ HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.IGNORECASE)
 # Resolvers and URL parsers read a host whose last label is numeric as an IPv4
 # literal in any inet_aton form (127.1, 0x7f.1, 0177.0.0.1, 2130706433).
 NUMERIC_LABEL = re.compile(r"0x[0-9a-f]*|[0-9]+", re.IGNORECASE)
+# URL parsers fold these to "." and drop invisible characters before resolving.
+IDEOGRAPHIC_DOTS = re.compile("[\u3002\uff0e\uff61]")
+NAT64_NETWORKS = (IPv6Network("64:ff9b::/96"), IPv6Network("64:ff9b:1::/48"))
+SPECIAL_USE_SUFFIXES = ("localhost", "local", "internal", "home.arpa", "test", "invalid", "onion", "alt")
 
 
 def is_public(address):
     if isinstance(address, IPv6Address):
         if address.is_site_local:
             return False
-        if address.ipv4_mapped is not None:
-            address = address.ipv4_mapped
+        embedded = address.ipv4_mapped
+        if embedded is None and (
+            int(address) >> 32 == 0 or any(address in net for net in NAT64_NETWORKS)
+        ):
+            embedded = IPv4Address(int(address) & 0xFFFFFFFF)
+        if embedded is not None:
+            address = embedded
     return address.is_global and not address.is_multicast
 
 
@@ -56,8 +66,47 @@ def is_fake_ip(address):
     return address is not None and address in FAKE_IP_NETWORK
 
 
+def canonical_host(hostname, invalid_url):
+    """The ASCII host a client resolves, after IDNA folding (fullwidth digits,
+    ideographic dots and invisible characters all fold away)."""
+    try:
+        host = hostname.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        raise InvalidRequest(invalid_url) from None
+    return host.removesuffix(".")
+
+
+def folded_host(hostname):
+    """An approximation of the UTS 46 mapping used by WHATWG URL parsers, as a
+    second opinion on non-ASCII hosts in case it folds differently to IDNA 2003."""
+    if hostname.isascii():
+        return None
+    host = unicodedata.normalize("NFKC", hostname).casefold()
+    host = "".join(
+        char for char in host
+        if unicodedata.category(char) not in ("Cf", "Mn") and char != "\u034f"
+    )
+    return IDEOGRAPHIC_DOTS.sub(".", host).removesuffix(".")
+
+
+def ipv4_literal(host, invalid_url):
+    """Parse a host that a URL parser would treat as an IP literal: any host
+    whose last label is a number, in every inet_aton form."""
+    try:
+        return ip_address(host)
+    except ValueError:
+        pass
+    if not NUMERIC_LABEL.fullmatch(host.rsplit(".", 1)[-1]):
+        return None
+    try:
+        return IPv4Address(socket.inet_aton(host))
+    except (OSError, UnicodeError, ValueError):
+        raise InvalidRequest(invalid_url) from None
+
+
 def validate_site(site: str) -> list[str]:
     invalid_url = "site: must be an HTTPS URL with a valid host and no credentials"
+    public_host_required = "site: host must be public"
     if "\\" in site or any(char.isspace() or ord(char) < 32 for char in site):
         raise InvalidRequest(invalid_url)
     try:
@@ -73,31 +122,24 @@ def validate_site(site: str) -> list[str]:
     ):
         raise InvalidRequest(invalid_url)
 
-    host = hostname.removesuffix(".")
-    public_host_required = "site: host must be public"
-    if "%" in host:
+    if "%" in hostname:
         raise InvalidRequest(invalid_url)
     try:
-        address = ip_address(host)
+        address = ip_address(hostname.removesuffix("."))
     except ValueError:
-        address = None
-    if address is None and NUMERIC_LABEL.fullmatch(host.rsplit(".", 1)[-1]):
-        try:
-            address = IPv4Address(socket.inet_aton(host))
-        except OSError:
-            raise InvalidRequest(invalid_url) from None
+        host = canonical_host(hostname, invalid_url)
+        folded = folded_host(hostname)
+        address = ipv4_literal(host, invalid_url)
+        if address is None and folded:
+            address = ipv4_literal(folded, invalid_url)
     if address is not None:
         if not is_public(address):
             raise InvalidRequest(public_host_required)
         return []
 
-    try:
-        host = host.encode("idna").decode("ascii").lower()
-    except UnicodeError:
-        raise InvalidRequest(invalid_url) from None
     if len(host) > 253 or any(not HOST_LABEL.fullmatch(label) for label in host.split(".")):
         raise InvalidRequest(invalid_url)
-    if "." not in host or host.endswith(".localhost"):
+    if "." not in host or host.endswith(tuple("." + suffix for suffix in SPECIAL_USE_SUFFIXES)):
         raise InvalidRequest(public_host_required)
     try:
         records = socket.getaddrinfo(f"{host}.", None, type=socket.SOCK_STREAM)

@@ -128,3 +128,44 @@ class ValidateTests(unittest.TestCase):
                     self.resolve.reset_mock()
                     self.request["site"] = f"https://{host}"
                     self.assert_rejected("site: must be an HTTPS URL")
+
+    def test_rejects_non_ascii_ipv4_literals(self):
+        resolvers = {
+            "public": self.resolve.return_value,
+            "fake-IP": [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 0))],
+        }
+        hosts = [
+            "127.0.0.\uff11",
+            "\uff11\uff12\uff17.\uff11",
+            "127\u30021",
+            "127\u30020\u30020\u30021",
+            "127\uff0e0\uff0e0\uff0e1",
+            "127.1\u200b",
+            "127.0.0.1\u00ad",
+            "1\u200d27.0.0.1",
+            "0x7f.0x\uff11",
+            "169.254.169.\uff12\uff15\uff14",
+            "[::127.0.0.1]",
+            "[64:ff9b::7f00:1]",
+            "[64:ff9b::a9fe:a9fe]",
+            "metadata.google.internal",
+            "printer.local",
+            "router.home.arpa",
+        ]
+        for mode, answer in resolvers.items():
+            for host in hosts:
+                with self.subTest(resolver=mode, host=host):
+                    self.resolve.reset_mock()
+                    self.resolve.return_value = answer
+                    self.request["site"] = f"https://{host}"
+                    self.assert_rejected("site: host must be public")
+
+    def test_accepts_internationalized_domain(self):
+        self.request["site"] = "https://b\u00fccher.example"
+        path = Path(self.directory) / "request.yaml"
+        path.write_text(yaml.safe_dump(self.request), encoding="utf-8")
+        code, stdout, stderr = self.run_validate(path)
+        self.assertEqual(code, 0, stderr)
+        self.resolve.assert_called_once_with(
+            "xn--bcher-kva.example.", None, type=socket.SOCK_STREAM
+        )

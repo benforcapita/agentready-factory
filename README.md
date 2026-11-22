@@ -22,8 +22,15 @@ public. It makes no HTTP requests. Tests mock DNS.
 Some proxied runtimes answer every DNS lookup with a fake-IP address from
 `198.18.0.0/15`. When every answer is in that range, validation warns that the
 public address check was skipped and accepts the request. Literal private IPs
-(including shorthand, octal and hex IPv4 forms such as `127.1` or `0x7f.1`),
-`localhost` and private answers mixed with fake-IP answers are still rejected.
+are still rejected in every form a URL parser accepts: shorthand, octal and hex
+IPv4 (`127.1`, `0x7f.1`), non-ASCII forms that fold to them after IDNA mapping
+(fullwidth digits, ideographic dots, zero-width and soft-hyphen characters),
+and IPv6 addresses embedding a private IPv4 (`[::127.0.0.1]`, `[64:ff9b::7f00:1]`).
+`localhost` and other special-use names (`.local`, `.internal`, `.home.arpa`,
+`.test`, `.invalid`, `.onion`, `.alt`) and private answers mixed with fake-IP
+answers are rejected too. A public DNS name that really points at a private
+address cannot be detected behind a fake-IP resolver, so `collect` must repeat
+the check on the real egress.
 
 Validation defaults to the `shadow` phase. Pass the current Factory Config value
 as `--phase shadow|reviewed|volume`. For `mode: eval`, set `eval_case` to the
