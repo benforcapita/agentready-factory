@@ -18,6 +18,14 @@ READER_ATTRIBUTES = ("title", "alt", "aria-label", "aria-description", "aria-rol
                      "aria-placeholder", "aria-valuetext", "placeholder")
 FORM_ATTRIBUTES = {"input": ("value",), "button": ("value",), "option": ("value", "label"),
                    "optgroup": ("label",), "track": ("label",)}
+VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+                 "source", "track", "wbr"}
+
+
+def css_hidden(attrs):
+    style = re.sub(r"\s+", "", (dict(attrs).get("style") or "").lower())
+    return any(name == "hidden" for name, _ in attrs) or bool(
+        re.search(r"display:none|visibility:(?:hidden|collapse)", style))
 
 
 class DeliveredHTML(HTMLDocument):
@@ -26,6 +34,25 @@ class DeliveredHTML(HTMLDocument):
     def __init__(self):
         super().__init__()
         self.attribute_text = []
+        self.open_elements = []
+        self.head_state = "before"
+
+    # Only the document's real <head> (before <body>) is non-text; browsers and WeasyPrint
+    # ignore a <head> tag inside the body and keep its children as body content.
+    def real_head(self, tag, start):
+        if tag == "body" and start and self.head_state == "open":
+            super().handle_endtag("head")
+        if tag == "body" and start:
+            self.head_state = "done"
+        if tag != "head":
+            return True
+        if start and self.head_state == "before":
+            self.head_state = "open"
+            return True
+        if not start and self.head_state == "open":
+            self.head_state = "done"
+            return True
+        return False
 
     def emit(self, text):
         if self.attribute_text and text.startswith("\n\n"):
@@ -34,15 +61,42 @@ class DeliveredHTML(HTMLDocument):
         super().emit(text)
 
     def handle_starttag(self, tag, attrs):
+        if not self.real_head(tag, start=True):
+            return
         super().handle_starttag(tag, attrs)
         if self.hidden:
             return
+        # Hidden subtrees are linted as their own unit: a boundary keeps them off the adjacent words.
+        hidden = css_hidden(attrs)
+        if hidden:
+            self.emit("\n")
+        if tag not in VOID_ELEMENTS:
+            self.open_elements.append((tag, hidden))
+        elif hidden:
+            self.emit("\n")
         names = READER_ATTRIBUTES + FORM_ATTRIBUTES.get(tag, ())
         for name, value in attrs:
             # Attribute text joins the end of its block, so the section and proposal logic still apply.
             value = re.sub(r"^[\s#]+", "", re.sub(r"\s+", " ", value or "")).strip()
             if name in names and value:
                 self.attribute_text.append(value)
+
+    def handle_endtag(self, tag):
+        if not self.real_head(tag, start=False):
+            return
+        if any(name == tag for name, _ in self.open_elements):
+            while self.open_elements:
+                name, hidden = self.open_elements.pop()
+                if hidden:
+                    self.emit("\n")
+                if name == tag:
+                    break
+        super().handle_endtag(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID_ELEMENTS:
+            self.handle_endtag(tag)
 
     def handle_comment(self, data):
         if not self.hidden:

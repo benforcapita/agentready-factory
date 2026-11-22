@@ -848,6 +848,26 @@ class RenderThenLintTests(unittest.TestCase):
                 found = {found_rule for found_rule, _, _ in inspect_view(html_text(page(section, body)))}
                 self.assertEqual(found, {rule} if rule else set())
 
+    def test_stray_head_keeps_html_view(self):
+        probe = '<span style="display:none">50 USD</span> מידע. <abbr title="Ben is a team leader">x</abbr> <!-- tech lead -->'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for head in ("", "<head>"):
+                with self.subTest(head=head):
+                    draft = GOOD.replace("Content.", "Content.\n\n" + head).replace("Talk.", probe)
+                    (root / "report.md").write_text(draft, encoding="utf-8")
+                    after, result = self.run_lint(root)
+                    self.assertEqual(after, 1, result)
+                    rendered = sorted(f["rule"] for f in result["findings"] if f["file"] == "rendered:report.html")
+                    self.assertEqual(rendered, ["ben-role", "ben-role", "price-in-offer"], result)
+
+    def test_html_view_ignores_head_tags_inside_body(self):
+        page = ("<html><head><title>Ben is a team leader</title><style>p{}</style></head><body>"
+                "<h2>3. Context</h2><p>a</p><head><p>b <span hidden>tech lead</span>c</p></head>"
+                "<p><span title=\"price list\">x</span></p></body></html>")
+        found = sorted(rule for rule, _, _ in inspect_view(html_text(page)))
+        self.assertEqual(found, ["ben-role", "price-in-offer"])
+
     def test_rendered_views_of_clean_drafts_pass(self):
         for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):
             with self.subTest(draft=name):

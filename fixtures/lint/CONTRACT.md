@@ -107,8 +107,12 @@ logic as the source lint. No rule definition changes.
   and reference-label text becomes once rendered.
 - `rendered:report.html`: every text node, HTML comment and reader-visible
   attribute value in the delivered HTML body, including `hidden`, `display:none`
-  and `visibility:hidden` subtrees; `<script>`, `<style>` and `<head>` are not
-  text. Reader-visible attributes are `title`, `alt`, `aria-label`,
+  and `visibility:hidden` subtrees; `<script>`, `<style>` and the document's real
+  `<head>` (before `<body>`) are not text. A `<head>` tag inside the body is
+  ignored, as browsers and WeasyPrint do, so its content and everything after it
+  is still linted. Each hidden subtree and comment is linted as its own unit: it
+  is bounded by line breaks, so hidden text never runs into the adjacent visible
+  word. Reader-visible attributes are `title`, `alt`, `aria-label`,
   `aria-description`, `aria-roledescription`, `aria-placeholder`,
   `aria-valuetext`, `placeholder`, `value` on `input`/`button`/`option` and
   `label` on `option`/`optgroup`/`track`. Their text is linted at the end of the
