@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 import sys
 
+from .collect import collect
+from .collect.transport import Refused
 from .request import PHASES
 from .validation import InvalidRequest, validate_request
 
@@ -32,9 +34,24 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     for command, help_text in STUBS.items():
-        commands.add_parser(command, help=help_text, description=help_text)
+        subcommand = commands.add_parser(command, help=help_text, description=help_text)
+        if command == "collect":
+            subcommand.add_argument("request", type=Path)
+            subcommand.add_argument("--out", type=Path, required=True)
+            subcommand.add_argument("--phase", choices=PHASES, default="shadow")
 
     args = parser.parse_args(argv)
+    if args.command == "collect":
+        try:
+            request, warnings = validate_request(args.request, phase=args.phase)
+            for warning in warnings:
+                print(f"warning: {warning}", file=sys.stderr)
+            collect(request.site, args.out)
+        except (InvalidRequest, Refused, OSError, ValueError) as error:
+            print(f"arf collect: {error}", file=sys.stderr)
+            return 1
+        print(f"Evidence collected in {args.out}")
+        return 0
     if args.command != "validate":
         print(f"arf {args.command}: not implemented", file=sys.stderr)
         return 1
