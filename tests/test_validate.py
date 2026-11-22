@@ -71,6 +71,80 @@ class ValidateTests(unittest.TestCase):
         del self.request["musy"]
         self.assert_rejected("musy: required when trigger is musy_lead")
 
+    def test_rejects_non_public_ipv6_literals(self):
+        hosts = [
+            "::ffff:0:127.0.0.1",
+            "::ffff:127.0.0.1",
+            "::ffff:10.0.0.1",
+            "64:ff9b::7f00:1",
+            "64:ff9b:1::7f00:1",
+            "64:ff9b:1:7f00:1::",
+            "2002:7f00:1::",
+            "::1",
+            "fe80::1",
+            "fc00::1",
+            "fec0::1",
+            "::",
+            "::127.0.0.1",
+            "ff0e::1",
+            "2001:db8::1",
+            "2001:0:5db8:d822:0:ffff:80ff:fffe",
+            "2001:0:7f00:1:0:ffff:a247:27dd",
+            "0:0:0:0:FFFF:0:7F00:0001",
+        ]
+        for host in hosts:
+            with self.subTest(host=host):
+                self.request["site"] = f"https://[{host}]"
+                self.assert_rejected("site: host must be public")
+
+    def test_rejects_non_public_embedded_ipv4_ranges(self):
+        for ipv4 in [
+            "0.0.0.0", "10.0.0.1", "100.64.0.1", "127.0.0.1",
+            "169.254.169.254", "172.16.0.1", "192.168.1.1",
+            "192.0.2.1", "198.18.0.1", "224.0.0.1", "240.0.0.1",
+        ]:
+            for prefix in ["::ffff:", "::ffff:0:", "64:ff9b::", "::"]:
+                with self.subTest(prefix=prefix, ipv4=ipv4):
+                    self.request["site"] = f"https://[{prefix}{ipv4}]"
+                    self.assert_rejected("site: host must be public")
+
+    def test_rejects_malformed_or_scoped_ipv6_literals(self):
+        for host in [
+            "[fe80::1%25eth0]", "[fe80::1%eth0]",
+            "[2606:4700:4700::1111%25eth0]", "[::ffff:0:127.0.0.1].",
+            "[::ffff:0:127.0.0.\uff11]", "[::ffff:0:127\u30020\u30020\u30021]",
+            "[::ffff:0:127.0.0.1\u200b]", "[]", "[::ffff:0:127.0.0.999]",
+        ]:
+            with self.subTest(host=host):
+                self.request["site"] = f"https://{host}"
+                self.assert_rejected("site: must be an HTTPS URL")
+
+    def test_accepts_public_ipv6_literals_without_dns(self):
+        for host in [
+            "2606:4700:4700::1111", "::ffff:93.184.216.34",
+            "::ffff:0:93.184.216.34", "64:ff9b::5db8:d822",
+        ]:
+            with self.subTest(host=host):
+                self.request["site"] = f"https://[{host}]:443/path"
+                path = Path(self.directory) / "request.yaml"
+                path.write_text(yaml.safe_dump(self.request), encoding="utf-8")
+                code, stdout, stderr = self.run_validate(path)
+                self.assertEqual(code, 0, stderr)
+                self.assertIn("Request is valid", stdout)
+                self.assertEqual(stderr, "")
+                self.resolve.assert_not_called()
+
+    def test_rejects_non_public_ipv6_resolver_answers(self):
+        for host in ["::ffff:0:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::"]:
+            with self.subTest(host=host):
+                self.resolve.return_value = [
+                    (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (host, 0, 0, 0)),
+                ]
+                code, stdout, stderr = self.run_validate(SAMPLE)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(stdout, "")
+                self.assertIn("site: host must resolve only to public addresses", stderr)
+
     def test_rejects_public_scan_without_ben_ok(self):
         self.request["allow_public_scan"] = True
         del self.request["ben_ok"]
