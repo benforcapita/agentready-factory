@@ -15,7 +15,7 @@
     {"id": "N2-title-role", "section": "3", "probe": "See <abbr title=\"Ben is a team leader\">note</abbr>.", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
     {"id": "N2-title-money", "section": "5", "probe": "Talk <span title=\"50 USD\">here</span>.", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
     {"id": "N2-title-pricing", "section": "3", "probe": "See <span title=\"price list\">note</span>.", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
-    {"id": "N2-alt-role", "section": "3", "probe": "<img alt=\"Ben is a team leader\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\">", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
+    {"id": "N2-alt-role", "section": "3", "probe": "<img alt=\"Ben is a team leader\" src=\"figure.png\">", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
     {"id": "N2-aria-label-role", "section": "3", "probe": "See <span aria-label=\"tech lead\">here</span>.", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
     {"id": "N2-title-innocuous", "section": "3", "probe": "See <abbr title=\"Internal note\">note</abbr>.", "source_hard": false, "rule": null, "view": null}
   ]
