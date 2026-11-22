@@ -3,7 +3,7 @@
 Command-line tools for the AgentReady report factory. `arf validate` reads a
 request YAML file. `arf collect` collects passive HTTP evidence. `arf notion check-schema` checks
 Notion schemas. `arf scaffold`, `arf render` and `arf lint` write, render and
-check report drafts. The `replay` command is a placeholder.
+check report drafts. `arf replay` replays a frozen evidence bundle offline.
 
 ## Setup
 
@@ -96,6 +96,21 @@ policy remains pending CTO/Engineering Lead decision.
 See [collect details](src/arf/collect/README.md) for configuration, guard rules
 and offline sample generation; the [sample bundle](fixtures/collect/sample/)
 uses only a local test server.
+
+## Replay
+
+```sh
+arf replay fixtures/golden/lehamim --out replay/lehamim --prompts fixtures/prompts/recorded \
+  --ack fixtures/lint/lehamim/lint-ack.json
+```
+
+Replay rebuilds a run from a frozen bundle and recorded Prompt Versions with every socket
+connection and DNS lookup refused. It checks each bundle file against `SHA256SUMS.txt`, writes
+`readers/`, `prompts-used.json`, `report.md`, `notes-for-ben.md`, `report.html`, `report.pdf` and
+`lint.json` to the empty `--out` folder, then writes `replay.json` with the golden checks: section
+order and table shapes match the bundle's `report.html`, lint passes and the PDF has 2–4 pages.
+Shadow replays (the default) carry the draft marker; `--final` must reproduce `report.html`
+byte for byte. It exits 1 when a check fails. CI runs it in a network namespace with no network.
 
 ## Notion
 

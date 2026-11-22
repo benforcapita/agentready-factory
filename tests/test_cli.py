@@ -121,14 +121,13 @@ class TopLevelTests(unittest.TestCase):
     def test_help_lists_wired_commands(self):
         code, stdout, _ = call(cli.main, ["--help"])
         self.assertEqual(code, 0)
-        for command in ("render", "lint", "scaffold"):
+        for command in ("render", "lint", "scaffold", "replay"):
             self.assertIn(command, stdout)
 
-    def test_replay_is_still_a_placeholder(self):
+    def test_replay_requires_bundle_and_out(self):
         code, _, stderr = call(cli.main, ["replay"])
-        self.assertEqual(code, 1)
-        self.assertIn("arf replay: not implemented", stderr)
-
+        self.assertEqual(code, 2)
+        self.assertNotIn("not implemented", stderr)
 
 if __name__ == "__main__":
     unittest.main()
