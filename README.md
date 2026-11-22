@@ -1,8 +1,8 @@
 # agentready-factory
 
 Command-line tools for the AgentReady report factory. `arf validate` reads a
-request YAML file. The `collect`, `scaffold`, `render`, `lint`, `notion`, and
-`replay` commands are placeholders.
+request YAML file. `arf collect` collects passive HTTP evidence. The `scaffold`,
+`render`, `lint`, `notion`, and `replay` commands are placeholders.
 
 ## Setup
 
@@ -40,3 +40,66 @@ are interpreted relative to the request file).
 `allow_public_scan` defaults to `false`. To request a public scan, include Ben's
 timestamped approval for this run as text in `ben_ok`. Validation checks that the
 text is present.
+
+## Collect
+
+```sh
+arf collect fixtures/requests/sample.yaml --out evidence/sample --phase shadow
+```
+
+Collection validates the request first, prints validation warnings, and refuses
+a non-empty output directory. It probes the site's apex and `www` host (apex
+first), independently of the URL's path, preserving any explicit site port.
+For each host, it GETs `/`,
+`/robots.txt`, `/llms.txt`, and `/sitemap.xml`, in that order, with nine identities:
+browser, Googlebot, GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, Claude-User,
+PerplexityBot, and Google-Extended. Google-Extended is a policy identity rather
+than a separate official HTTP crawler; its synthetic UA makes this probe
+explicit. Probe redirects are recorded as raw responses, never followed.
+
+Five additional browser-only discovery paths are fetched once per host:
+`/.well-known/ai-catalog.json`, `/llms-full.txt`, `/.well-known/security.txt`,
+`/sitemap_index.xml`, and `/.well-known/ai-plugin.json`. Only these discovery
+requests follow HTTP(S) redirects, up to three hops. Each hop consumes a request
+against its actual target host. **The 60-request cap is per host**, reconciling
+the required 72 probe rows (9 × 4 × 2) with the ticket's limit. Normally there
+are 41 requests per host; even three redirects on all five discovery paths fit
+at 56. A hard counter stops before any request exceeding the cap. Requests
+use a 10-second wall-clock deadline covering DNS, connect, headers and body,
+and read at most 2 MiB per response; `size` is the body
+bytes received, not Content-Length or the decompressed size. No cookies,
+authentication, forms, active scans, or non-GET requests are used.
+
+Every target, including redirects, is classified with the validator's IDNA,
+numeric IPv4, embedded IPv4/IPv6 and special-use host rules. At connection time
+all DNS answers must be public. Fake-IP answers (`198.18.0.0/15`) are refused
+with a real-egress verification error, even though validation only warns.
+Connections pin a vetted IP without a second lookup; HTTPS uses certificate
+verification and SNI for the original hostname and HTTP uses its Host header.
+A guard refusal or exhausted budget immediately aborts the run (a partial
+bundle may remain). Network/HTTP errors get `error` probe rows and details in
+`errors.json`; a completed bundle with such errors still exits 1. Success exits
+0. Discovery redirect exhaustion also exits 1.
+
+Outputs:
+
+- `probes.csv`: exactly `domain,path,agent,status,server,cf_ray,size`, ordered
+  host → path → identity; absent headers are empty.
+- `discovery.csv` and `discovery/*.body`: each fetched discovery response,
+  including redirect bodies, with its URL, status and size.
+- `errors.json`: short network/HTTP error details, empty on success.
+- `evidence.json`: tool/version, site/hosts, Asia/Jerusalem ISO timestamps,
+  total/per-host request counts, config summary, and sorted relative paths,
+  byte counts and SHA-256 for every other bundle file.
+
+The committed [sample bundle](fixtures/collect/sample/) is generated entirely
+offline against a local threading HTTP server (synthetic hostnames, explicit
+host-scoped loopback allowance). To regenerate into an empty directory:
+
+```sh
+python -m tests.collect_server fixtures/collect/sample-new
+```
+
+Only the internal Python API accepts a resolver, scheme, port, and host-scoped
+guard-policy allowance for offline tests. None is exposed in the CLI; its
+default policy is always public-only. Tests never resolve or fetch real sites.
