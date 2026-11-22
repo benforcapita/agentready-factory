@@ -13,8 +13,19 @@ from urllib.parse import urlsplit
 
 from ..validation import (
     InvalidRequest, SPECIAL_USE_SUFFIXES, canonical_host, folded_host,
-    ipv4_literal, is_fake_ip, is_public,
+    ipv4_literal, is_fake_ip, is_public as validation_is_public,
 )
+
+
+SIX_TO_FOUR = ip_network("2002::/16")
+
+
+def is_public(address):
+    return not (address.version == 6 and address in SIX_TO_FOUR) and validation_is_public(address)
+
+
+class BudgetExhausted(Exception):
+    """No further site connection attempts are permitted."""
 
 
 class Refused(ValueError):
@@ -26,6 +37,8 @@ class GuardPolicy:
     allowed_networks: dict = field(default_factory=dict)
 
     def allows(self, host, address):
+        if address.version == 6 and address in SIX_TO_FOUR:
+            return False
         return is_public(address) or any(
             address in ip_network(network)
             for network in self.allowed_networks.get(host, ())
@@ -65,7 +78,7 @@ def target(url, policy):
 class PinnedHTTPConnection(http.client.HTTPConnection):
     def __init__(self, host, port, *, resolver, policy, timeout, deadline=None,
                  fake_ip_policy="refuse", doh_endpoint=None, doh_resolver=None,
-                 doh_answers=None):
+                 doh_answers=None, before_connect=None):
         super().__init__(host, port, timeout=timeout)
         self.resolver = resolver
         self.policy = policy
@@ -76,6 +89,7 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
         self.doh_endpoint = doh_endpoint
         self.doh_resolver = doh_resolver
         self.doh_answers = doh_answers if doh_answers is not None else {}
+        self.before_connect = before_connect
 
     def remaining(self):
         remaining = self.timeout if self.deadline is None else self.deadline - monotonic()
@@ -149,6 +163,14 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
                 raise Refused(f"{self.host}: DNS must resolve only to public addresses")
         last_error = None
         for family, socktype, proto, _, sockaddr in records:
+            self.remaining()
+            if self.before_connect is not None:
+                try:
+                    self.before_connect()
+                except BudgetExhausted:
+                    if last_error is not None:
+                        raise last_error
+                    raise
             sock = socket.socket(family, socktype, proto)
             try:
                 self.sock = sock

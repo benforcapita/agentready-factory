@@ -17,7 +17,7 @@ from arf.collect import collect, config
 from arf.collect.doh import resolve_doh
 from arf.collect.transport import GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused
 from arf.validation import InvalidRequest
-from tests.collect_server import local_policy, resolve, server
+from tests.collect_server import closing_server, local_policy, resolve, server
 
 
 class CollectTests(unittest.TestCase):
@@ -89,6 +89,83 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(sum(self.instance.hits.values()), 75)
         with (self.out / "discovery.csv").open() as stream:
             self.assertIn("skipped_budget", {row["status"] for row in csv.DictReader(stream)})
+
+    def assert_failed_budget(self, error_rows=5):
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        self.assertEqual(manifest["requests_made"], 5)
+        self.assertEqual(manifest["max_requests"], 5)
+        with (self.out / "probes.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 72)
+        self.assertEqual(sum(row["status"] == "error" for row in rows), error_rows)
+        self.assertEqual(sum(row["status"] == "skipped_budget" for row in rows), 72 - error_rows)
+        with (self.out / "discovery.csv").open() as stream:
+            self.assertEqual({row["status"] for row in csv.DictReader(stream)}, {"skipped_budget"})
+
+    def test_failed_tls_handshakes_consume_global_budget(self):
+        with closing_server() as instance:
+            with self.assertRaisesRegex(OSError, "errors.json"):
+                self.run_collect(scheme="https", port=instance.server_address[1], max_requests=5)
+            self.assertEqual(instance.accepted, 5)
+        self.assert_failed_budget()
+
+    def test_failed_tcp_connections_consume_global_budget(self):
+        with socket.socket() as unavailable:
+            unavailable.bind(("127.0.0.1", 0))
+            with self.assertRaisesRegex(OSError, "errors.json"):
+                self.run_collect(port=unavailable.getsockname()[1], max_requests=5)
+        self.assert_failed_budget()
+
+    def test_fallback_addresses_cannot_bypass_global_budget(self):
+        attempts = []
+
+        class CountingSocket(socket.socket):
+            def connect(sock, address):
+                attempts.append(address)
+                return super().connect(address)
+
+        with socket.socket() as unavailable:
+            unavailable.bind(("127.0.0.1", 0))
+            port = unavailable.getsockname()[1]
+            resolver = Mock(return_value=resolve("shop.example", port) * 2)
+            with patch("arf.collect.transport.socket.socket", CountingSocket):
+                with self.assertRaisesRegex(OSError, "errors.json"):
+                    self.run_collect(port=port, resolver=resolver, max_requests=5)
+        self.assertEqual(len(attempts), 5)
+        self.assert_failed_budget(error_rows=3)
+
+    def test_preconnect_refusal_does_not_consume_budget(self):
+        self.instance.redirect = "http://private.example/"
+
+        def resolving(host, port, **kwargs):
+            if host == "private.example":
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", port))]
+            return resolve(host, port, **kwargs)
+
+        with self.assertRaisesRegex(OSError, "errors.json"):
+            self.run_collect(resolver=resolving)
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        self.assertEqual(manifest["requests_made"], 82)
+        self.assertEqual(sum(self.instance.hits.values()), 82)
+        self.assertNotIn("private.example", manifest["request_count"]["per_host"])
+
+    def test_6to4_is_denied_even_if_ipaddress_considers_it_global(self):
+        address = "2002:0808:0808::1"
+        with patch("arf.collect.transport.validation_is_public", return_value=True), patch("arf.collect.transport.socket.socket") as sock:
+            resolver = Mock()
+            with self.assertRaisesRegex(Refused, "literal"):
+                collect(f"https://[{address}]", self.out, resolver=resolver)
+            resolver.assert_not_called()
+            resolver.return_value = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 443, 0, 0))]
+            with self.assertRaisesRegex(Refused, "public addresses"):
+                self.run_collect(resolver=resolver, policy=GuardPolicy())
+            connection = PinnedHTTPConnection("shop.example", 80,
+                resolver=Mock(return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 80))]),
+                policy=GuardPolicy(), timeout=1, fake_ip_policy="doh_verify",
+                doh_resolver=Mock(return_value=[address]))
+            with self.assertRaisesRegex(Refused, "DoH answers must all be public"):
+                connection.connect()
+            sock.assert_not_called()
 
     def test_environment_defaults_and_explicit_overrides(self):
         with patch.dict("os.environ", {"ARF_MAX_REQUESTS": "0", "ARF_FAKE_IP_POLICY": "doh_verify",

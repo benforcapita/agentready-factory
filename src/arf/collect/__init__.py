@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .doh import resolve_doh
-from .transport import GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
+from .transport import BudgetExhausted, GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
 from ..validation import ipv4_literal
 
 
@@ -63,12 +63,19 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
         if sum(counts.values()) >= max_requests:
             return "skipped_budget", "", "", b"", None
         parts, name = target(url, policy)
+
+        def reserve_attempt():
+            if sum(counts.values()) >= max_requests:
+                raise BudgetExhausted()
+            counts[name] += 1
+
         cls = PinnedHTTPSConnection if parts.scheme == "https" else PinnedHTTPConnection
         deadline = monotonic() + config.TIMEOUT
         connection = cls(name, parts.port, resolver=resolver, policy=policy,
                          timeout=config.TIMEOUT, deadline=deadline,
                          fake_ip_policy=fake_ip_policy, doh_endpoint=doh_endpoint,
-                         doh_resolver=doh_resolver, doh_answers=doh_answers)
+                         doh_resolver=doh_resolver, doh_answers=doh_answers,
+                         before_connect=reserve_attempt)
         timer = Timer(config.TIMEOUT, connection.abort)
         timer.daemon = True
         body = bytearray()
@@ -77,7 +84,6 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
             path = urlunsplit(("", "", parts.path or "/", parts.query, ""))
             connection.connect()
             connection.remaining()
-            counts[name] += 1
             connection.request("GET", path, headers={"User-Agent": ua, "Accept": "*/*"})
             response = connection.getresponse()
             while len(body) < config.MAX_BODY_BYTES:
@@ -89,6 +95,8 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
                 body.extend(chunk)
             connection.remaining()
             return response.status, response.getheader("Server", ""), response.getheader("CF-Ray", ""), bytes(body), response.getheader("Location")
+        except BudgetExhausted:
+            return "skipped_budget", "", "", b"", None
         except (OSError, http.client.HTTPException) as error:
             reason = "timeout" if isinstance(error, TimeoutError) or connection.expired.is_set() or monotonic() >= deadline else str(error)[:200]
             errors.append({"url": url, "reason": reason})

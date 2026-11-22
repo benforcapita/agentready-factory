@@ -10,8 +10,9 @@ follows at most three HTTP(S) redirects, guarding each target independently.
 One **100-request budget per run** replaces the previous 60-per-host cap. Both
 hosts, probes, discovery and each discovery redirect hop share this budget.
 DoH verification traffic is separate and does not consume the site budget.
-The counter records site GET attempts after the connection passes its guard;
-failed HTTP attempts count, but guard refusals and failed connects do not.
+The counter reserves one attempt after DNS/SSRF checks but before opening each
+site socket. Failed TCP connections, TLS handshakes and HTTP requests count;
+each fallback address tried also counts. Refusals before opening a socket do not.
 
 Once exhausted, no more site requests are sent. Remaining probe rows and
 discovery entries use `skipped_budget`; budget exhaustion alone is successful
@@ -45,7 +46,8 @@ verification and the site's request deadline. Every real A/AAAA address must
 pass the same public-address rules, without test-network allowances. Empty,
 malformed, truncated, unsuccessful or timed-out verification fails closed.
 Mixed fake/real system DNS answers always fail closed. Literal classification
-and private/loopback/link-local/embedded-IP checks remain enforced.
+and private/loopback/link-local/embedded-IP checks remain enforced. Collect
+explicitly denies 6to4 (`2002::/16`), including on older Python 3.12 versions.
 
 After successful verification, collection pins the **system fake address**, not
 the DoH address, to preserve the proxy egress path. Verification repeats at each
@@ -69,8 +71,12 @@ probe host may still abort immediately and leave a partial bundle.
   passive GETs; DoH is not proof of the proxy's real destination.
 - `collect` does **not** check the request's `allow_public_scan` flag (QA N4,
   pending CTO/Engineering Lead policy).
-- The root README's earlier per-host-cap description is superseded by this
-  module documentation for the global-budget/DoH implementation.
+- A DoH timeout on a probe host aborts the run with a refusal; discovery
+  verification failures are recorded and later paths continue (QA N2).
+- `ARF_MAX_REQUESTS` has no upper bound; operators can raise it above the default
+  global budget (QA N4, budget configuration).
+- Discovery may follow HTTPS → HTTP redirects after target safety checks;
+  transport downgrade is not blocked (QA N5).
 
 The sample at `fixtures/collect/sample/` is generated offline using
 `python -m tests.collect_server fixtures/collect/sample` into an empty directory.
