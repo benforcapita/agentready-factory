@@ -8,7 +8,7 @@ import yaml
 from ..request import Request
 from ..validation import validate_policy
 from . import MemoryStore, Orchestrator
-from .replay import ReplaySteps
+from .replay import ACK, GOLDEN, ReplaySteps
 
 
 def main(argv=None):
@@ -17,6 +17,8 @@ def main(argv=None):
     dry_run = commands.add_parser("dry-run", help="walk one request through a recorded run (no DNS or network)")
     dry_run.add_argument("request", type=Path)
     dry_run.add_argument("--out", type=Path, required=True)
+    dry_run.add_argument("--golden", type=Path, default=GOLDEN, help="recorded draft directory with report.md")
+    dry_run.add_argument("--ack", type=Path, default=ACK, help="lint ack file for the recorded draft")
     dry_run.add_argument("--duplicate", action="store_true", help="submit the request a second time")
     dry_run.add_argument("--force-lint-failure", action="store_true", help="seed a price in every draft")
     args = parser.parse_args(argv)
@@ -26,7 +28,8 @@ def main(argv=None):
     except (OSError, ValueError, yaml.YAMLError) as error:
         parser.exit(2, f"error: {error}\n")
     store = MemoryStore()
-    steps = ReplaySteps(args.out, failing_drafts=1_000 if args.force_lint_failure else 0)
+    steps = ReplaySteps(args.out, failing_drafts=1_000 if args.force_lint_failure else 0,
+                        golden=args.golden, ack=args.ack)
     orchestrator = Orchestrator(store, steps)
     submission = orchestrator.submit(request)
     task = orchestrator.execute(submission.task.id)

@@ -145,6 +145,7 @@ copy with the Runs `Status` property renamed to `Run status` and fails.
 ## Orchestrator (T8a)
 
 ```sh
+# from the repository root (fixture paths are relative; override with --golden/--ack)
 python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out /tmp/arf-dry-run --duplicate
 python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out /tmp/arf-blocked --force-lint-failure
 ```

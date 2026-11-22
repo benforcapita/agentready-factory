@@ -26,6 +26,8 @@ from arf.request import Request
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "fixtures/requests/sample.yaml"
+GOLDEN = ROOT / "fixtures/golden/lehamim"
+ACK = ROOT / "fixtures/lint/lehamim/lint-ack.json"
 NOW = datetime(2026, 11, 22, 13, 30, tzinfo=timezone.utc)
 HAPPY_PATH = ["Requested", "Claimed", "Collecting evidence", "Drafting", "Rendering", "Checking", "Needs review"]
 
@@ -286,11 +288,14 @@ class RunTests(unittest.TestCase):
 
 
 class ReplayTests(unittest.TestCase):
+    fixture_args = ("--golden", str(GOLDEN), "--ack", str(ACK))
+
     def run_replay(self, failing_drafts):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         store = MemoryStore()
-        orchestrator = Orchestrator(store, ReplaySteps(Path(directory.name), failing_drafts=failing_drafts),
+        orchestrator = Orchestrator(store, ReplaySteps(Path(directory.name), failing_drafts=failing_drafts,
+                                                            golden=GOLDEN, ack=ACK),
                                     clock=lambda: NOW)
         submission = orchestrator.submit(request())
         return store, orchestrator.execute(submission.task.id), Path(directory.name) / submission.run.id
@@ -317,14 +322,14 @@ class ReplayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                code = main(["dry-run", str(SAMPLE), "--out", directory, "--duplicate"])
+                code = main(["dry-run", str(SAMPLE), "--out", directory, "--duplicate", *self.fixture_args])
             self.assertEqual(code, 0, output.getvalue())
             self.assertIn("duplicate: reused=True run=run-0001", output.getvalue())
             self.assertIn("result: task task-0001 Needs review; run run-0001 succeeded", output.getvalue())
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                code = main(["dry-run", str(SAMPLE), "--out", directory, "--force-lint-failure"])
+                code = main(["dry-run", str(SAMPLE), "--out", directory, "--force-lint-failure", *self.fixture_args])
             self.assertEqual(code, 1)
             self.assertIn("Guardrail blocked; run run-0001 guardrail_blocked; fix attempts 2", output.getvalue())
 

@@ -60,6 +60,12 @@ jobs:
               "out/replay/$mode/replay.json"
           done
           diff -u fixtures/golden/lehamim/report.html out/replay/final/report.html
+      - name: Orchestrator dry run (T8a)
+        run: |
+          python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out "$RUNNER_TEMP/arf-dry-run" --duplicate
+          if python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out "$RUNNER_TEMP/arf-blocked" --force-lint-failure; then
+            echo "forced lint failure did not block"; exit 1
+          fi
       - name: Upload replay artifacts
         if: always()
         uses: actions/upload-artifact@v4

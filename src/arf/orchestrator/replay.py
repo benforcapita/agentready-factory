@@ -9,14 +9,13 @@ from ..lint import lint
 from ..render import draft_comment, render_html
 from . import RunContext
 
-ROOT = Path(__file__).resolve().parents[3]
-GOLDEN = ROOT / "fixtures/golden/lehamim"
-ACK = ROOT / "fixtures/lint/lehamim/lint-ack.json"
+GOLDEN = Path("fixtures/golden/lehamim")
+ACK = Path("fixtures/lint/lehamim/lint-ack.json")
 SEEDED_PRICE = "\n\n50 USD"
 
 
 class ReplaySteps:
-    """Writes each run's draft under OUT/<run id>/.
+    """Writes each run's draft under OUT/<run id>/. Fixture paths default to the repository checkout.
 
     `failing_drafts` drafts in a row carry a seeded price in §5 (a lint hard fail), so 1 shows a
     successful fix and 3 or more exhausts the two fix attempts.
@@ -25,8 +24,8 @@ class ReplaySteps:
     def __init__(self, out: Path, *, failing_drafts: int = 0, golden: Path = GOLDEN, ack: Path = ACK) -> None:
         self.out = Path(out)
         self.failing_drafts = failing_drafts
-        self.golden = golden
-        self.ack = ack
+        self.golden = Path(golden)
+        self.ack = Path(ack)
         self.drafts = 0
 
     def directory(self, context: RunContext) -> Path:
