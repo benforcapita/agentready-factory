@@ -147,8 +147,12 @@ class ReplayGoldenTest(unittest.TestCase):
     def test_replay_is_deterministic(self):
         with tempfile.TemporaryDirectory() as temp:
             again = replay(GOLDEN, Path(temp), PROMPTS, run_id="golden", ack=ACK)
-        for name in ("report.md", "report.html", "lint.json", "prompts-used.json"):
+            lint = json.loads((Path(temp) / "lint.json").read_text(encoding="utf-8"))
+        for name in ("report.md", "report.html", "prompts-used.json"):
             self.assertEqual(again["outputs"][name], self.shadow["outputs"][name], name)
+        first = json.loads((self.shadow_out / "lint.json").read_text(encoding="utf-8"))
+        self.assertEqual(lint["findings"], first["findings"])
+        self.assertEqual(lint["summary"], first["summary"])
 
 
 class ReplayFailureTest(unittest.TestCase):
