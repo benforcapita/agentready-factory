@@ -2,6 +2,7 @@
 
 import logging
 import re
+import warnings
 
 from .document import HTMLDocument, headings
 
@@ -69,7 +70,9 @@ def render_views(markdown_source):
     level = logger.level
     logger.setLevel(logging.CRITICAL)
     try:
-        rendered, _ = layout_pdf(document)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            rendered, _ = layout_pdf(document)
     finally:
         logger.setLevel(level)
     return [(PDF_VIEW, pdf_text(rendered)), (HTML_VIEW, html_text(document))]

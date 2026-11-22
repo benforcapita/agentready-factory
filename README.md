@@ -54,6 +54,10 @@ These subcommands run the `python -m arf.scaffold`, `python -m arf.render` and
 `python -m arf.lint` entry points with the same flags, output and exit codes.
 Run `arf <command> --help` for the flags.
 
+`arf lint` checks the Markdown source first, then renders it with `arf render`
+and lints the customer-visible HTML and PDF text (render-then-lint). Pass
+`--source-only` to skip the render step.
+
 ## Collect
 
 ```sh
