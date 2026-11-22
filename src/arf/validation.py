@@ -43,16 +43,23 @@ NUMERIC_LABEL = re.compile(r"0x[0-9a-f]*|[0-9]+", re.IGNORECASE)
 # URL parsers fold these to "." and drop invisible characters before resolving.
 IDEOGRAPHIC_DOTS = re.compile("[\u3002\uff0e\uff61]")
 NAT64_NETWORKS = (IPv6Network("64:ff9b::/96"), IPv6Network("64:ff9b:1::/48"))
+SIIT_NETWORK = IPv6Network("::ffff:0:0:0/96")
 SPECIAL_USE_SUFFIXES = ("localhost", "local", "internal", "home.arpa", "test", "invalid", "onion", "alt")
 
 
 def is_public(address):
     if isinstance(address, IPv6Address):
-        if address.is_site_local:
+        if not address.is_global or address.is_site_local or address.is_multicast:
             return False
         embedded = address.ipv4_mapped
+        if embedded is None:
+            embedded = address.sixtofour
+        if address.teredo is not None:
+            return all(is_public(endpoint) for endpoint in address.teredo)
         if embedded is None and (
-            int(address) >> 32 == 0 or any(address in net for net in NAT64_NETWORKS)
+            int(address) >> 32 == 0
+            or address in SIIT_NETWORK
+            or any(address in net for net in NAT64_NETWORKS)
         ):
             embedded = IPv4Address(int(address) & 0xFFFFFFFF)
         if embedded is not None:
