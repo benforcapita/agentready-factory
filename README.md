@@ -21,7 +21,8 @@ public. It makes no HTTP requests. Tests mock DNS.
 
 Some proxied runtimes answer every DNS lookup with a fake-IP address from
 `198.18.0.0/15`. When every answer is in that range, validation warns that the
-public address check was skipped and accepts the request. Literal private IPs,
+public address check was skipped and accepts the request. Literal private IPs
+(including shorthand, octal and hex IPv4 forms such as `127.1` or `0x7f.1`),
 `localhost` and private answers mixed with fake-IP answers are still rejected.
 
 Validation defaults to the `shadow` phase. Pass the current Factory Config value

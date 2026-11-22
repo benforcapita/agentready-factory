@@ -1,6 +1,6 @@
 """Load and validate a request without fetching its site."""
 
-from ipaddress import IPv4Network, IPv6Address, ip_address
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_address
 from pathlib import Path
 import re
 import socket
@@ -36,6 +36,9 @@ class RequestLoader(yaml.SafeLoader):
 FAKE_IP_NETWORK = IPv4Network("198.18.0.0/15")
 
 HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.IGNORECASE)
+# Resolvers and URL parsers read a host whose last label is numeric as an IPv4
+# literal in any inet_aton form (127.1, 0x7f.1, 0177.0.0.1, 2130706433).
+NUMERIC_LABEL = re.compile(r"0x[0-9a-f]*|[0-9]+", re.IGNORECASE)
 
 
 def is_public(address):
@@ -78,6 +81,11 @@ def validate_site(site: str) -> list[str]:
         address = ip_address(host)
     except ValueError:
         address = None
+    if address is None and NUMERIC_LABEL.fullmatch(host.rsplit(".", 1)[-1]):
+        try:
+            address = IPv4Address(socket.inet_aton(host))
+        except OSError:
+            raise InvalidRequest(invalid_url) from None
     if address is not None:
         if not is_public(address):
             raise InvalidRequest(public_host_required)

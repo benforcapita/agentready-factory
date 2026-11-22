@@ -110,3 +110,21 @@ class ValidateTests(unittest.TestCase):
                 self.resolve.reset_mock()
                 self.request["site"] = f"https://{host}"
                 self.assert_rejected("site: host must be public")
+
+    def test_rejects_shorthand_ipv4_literals(self):
+        resolvers = {
+            "public": self.resolve.return_value,
+            "fake-IP": [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 0))],
+        }
+        for mode, answer in resolvers.items():
+            for host in ["127.1", "0x7f.1", "10.1", "0177.0.0.1", "0X7F000001", "2130706433"]:
+                with self.subTest(resolver=mode, host=host):
+                    self.resolve.reset_mock()
+                    self.resolve.return_value = answer
+                    self.request["site"] = f"https://{host}"
+                    self.assert_rejected("site: host must be public")
+            for host in ["0x7g.1", "1.2.3.4.5", "999.1"]:
+                with self.subTest(resolver=mode, host=host):
+                    self.resolve.reset_mock()
+                    self.request["site"] = f"https://{host}"
+                    self.assert_rejected("site: must be an HTTPS URL")
