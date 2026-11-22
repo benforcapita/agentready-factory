@@ -47,59 +47,39 @@ text is present.
 arf collect fixtures/requests/sample.yaml --out evidence/sample --phase shadow
 ```
 
-Collection validates the request first, prints validation warnings, and refuses
-a non-empty output directory. It probes the site's apex and `www` host (apex
-first), independently of the URL's path, preserving any explicit site port.
-For each host, it GETs `/`,
-`/robots.txt`, `/llms.txt`, and `/sitemap.xml`, in that order, with nine identities:
-browser, Googlebot, GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, Claude-User,
-PerplexityBot, and Google-Extended. Google-Extended is a policy identity rather
-than a separate official HTTP crawler; its synthetic UA makes this probe
-explicit. Probe redirects are recorded as raw responses, never followed.
+Collection validates first and requires an empty output directory. Passive GETs
+probe nine identities across four paths on the apex and `www` hosts (72 rows),
+preserving explicit ports. IP literals use only one host, never `www.<ip>`.
+Probe redirects are not followed; browser-only discovery follows at most three
+HTTP(S) redirect hops, checking each target.
 
-Five additional browser-only discovery paths are fetched once per host:
-`/.well-known/ai-catalog.json`, `/llms-full.txt`, `/.well-known/security.txt`,
-`/sitemap_index.xml`, and `/.well-known/ai-plugin.json`. Only these discovery
-requests follow HTTP(S) redirects, up to three hops. Each hop consumes a request
-against its actual target host. **The 60-request cap is per host**, reconciling
-the required 72 probe rows (9 × 4 × 2) with the ticket's limit. Normally there
-are 41 requests per host; even three redirects on all five discovery paths fit
-at 56. A hard counter stops before any request exceeding the cap. Requests
-use a 10-second wall-clock deadline covering DNS, connect, headers and body,
-and read at most 2 MiB per response; `size` is the body
-bytes received, not Content-Length or the decompressed size. No cookies,
-authentication, forms, active scans, or non-GET requests are used.
+One **global budget of 100 requests per run** covers probes, discovery and every
+redirect hop. Exhaustion sends no more requests and writes `skipped_budget`
+rows for remaining probes/discovery; budget exhaustion alone exits 0.
+Environment configuration (explicit Python kwargs take precedence):
 
-Every target, including redirects, is classified with the validator's IDNA,
-numeric IPv4, embedded IPv4/IPv6 and special-use host rules. At connection time
-all DNS answers must be public. Fake-IP answers (`198.18.0.0/15`) are refused
-with a real-egress verification error, even though validation only warns.
-Connections pin a vetted IP without a second lookup; HTTPS uses certificate
-verification and SNI for the original hostname and HTTP uses its Host header.
-A guard refusal or exhausted budget immediately aborts the run (a partial
-bundle may remain). Network/HTTP errors get `error` probe rows and details in
-`errors.json`; a completed bundle with such errors still exits 1. Success exits
-0. Discovery redirect exhaustion also exits 1.
+- `ARF_MAX_REQUESTS`: non-negative global budget (default `100`).
+- `ARF_FAKE_IP_POLICY`: `refuse` (default) or `doh_verify`.
+- `ARF_DOH_ENDPOINT`: HTTPS DNS JSON endpoint (default
+  `https://cloudflare-dns.com/dns-query`).
 
-Outputs:
+`doh_verify` rechecks all-fake system DNS answers through HTTPS A and AAAA
+queries, requiring every returned address to be public. Empty, malformed,
+failed or timed-out verification and mixed fake/real system answers are refused.
+After verification, connections pin the system fake address for proxy egress;
+DoH traffic does not consume the site budget. Requests retain the 10-second
+wall-clock deadline, capped bodies and HTTPS hostname/certificate checks.
 
-- `probes.csv`: exactly `domain,path,agent,status,server,cf_ray,size`, ordered
-  host → path → identity; absent headers are empty.
-- `discovery.csv` and `discovery/*.body`: each fetched discovery response,
-  including redirect bodies, with its URL, status and size.
-- `errors.json`: short network/HTTP error details, empty on success.
-- `evidence.json`: tool/version, site/hosts, Asia/Jerusalem ISO timestamps,
-  total/per-host request counts, config summary, and sorted relative paths,
-  byte counts and SHA-256 for every other bundle file.
+Malformed discovery Locations are recorded as errors; unsafe/invalid redirect
+targets are recorded as refused. Both continue to later discovery paths/hosts.
+An unsafe probe host can still hard-stop. Completed bundles with errors exit 1.
+Outputs include `probes.csv`, discovery rows/bodies, `errors.json`, and
+`evidence.json` with counts, policy/DoH answers, timestamps and file hashes.
 
-The committed [sample bundle](fixtures/collect/sample/) is generated entirely
-offline against a local threading HTTP server (synthetic hostnames, explicit
-host-scoped loopback allowance). To regenerate into an empty directory:
+**Limitations:** the proxy may resolve differently from DoH (accepted for passive
+GETs). `collect` does not enforce the request's `allow_public_scan` flag; that
+policy remains pending CTO/Engineering Lead decision.
 
-```sh
-python -m tests.collect_server fixtures/collect/sample-new
-```
-
-Only the internal Python API accepts a resolver, scheme, port, and host-scoped
-guard-policy allowance for offline tests. None is exposed in the CLI; its
-default policy is always public-only. Tests never resolve or fetch real sites.
+See [collect details](src/arf/collect/README.md) for configuration, guard rules
+and offline sample generation; the [sample bundle](fixtures/collect/sample/)
+uses only a local test server.
