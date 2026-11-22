@@ -13,6 +13,7 @@ from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.confusables import CONFUSABLES
 from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton, hebrew_pattern
+from arf.lint.rendered import inspect_view, render_views
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
@@ -791,3 +792,64 @@ class LintTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RenderThenLintTests(unittest.TestCase):
+    PLACEHOLDER = {"3": "Content.", "5": "Talk."}
+
+    def run_lint(self, root, *args):
+        process = subprocess.run([sys.executable, "-m", "arf.lint", str(root), *args],
+                                 cwd=ROOT, text=True, capture_output=True)
+        return process.returncode, json.loads((root / "lint.json").read_text(encoding="utf-8"))
+
+    def test_render_then_lint_fixtures(self):
+        cases = json.loads((FIXTURES / "render/cases.json").read_text(encoding="utf-8"))["cases"]
+        self.assertTrue({c["id"].split("-")[0] for c in cases} >= {"B3", "N2"})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for case in cases:
+                with self.subTest(case=case["id"]):
+                    draft = GOOD.replace(self.PLACEHOLDER[case["section"]], case["probe"])
+                    (root / "report.md").write_text(draft, encoding="utf-8")
+                    before, source = self.run_lint(root, "--source-only")
+                    self.assertEqual(before, case["source_only"], source)
+                    self.assertIn("render-then-lint", {s["check"] for s in source["skipped_checks"]})
+                    after, result = self.run_lint(root)
+                    self.assertNotIn("render-then-lint", {s["check"] for s in result["skipped_checks"]})
+                    hard = {f["rule"] for f in result["findings"] if f["level"] == "hard_fail"}
+                    views = dict(render_views(draft))
+                    if case["rule"] is None:
+                        self.assertEqual(after, 0, result)
+                        self.assertFalse(hard)
+                        for text in views.values():
+                            self.assertEqual(inspect_view(text), [])
+                        continue
+                    self.assertEqual(after, 1, result)
+                    self.assertEqual(hard, {case["rule"]})
+                    self.assertIn(case["rule"], {rule for rule, _, _ in inspect_view(views[case["view"]])})
+                    if case["source_only"] == 0:
+                        self.assertIn(case["view"], {f["file"] for f in result["findings"]})
+
+    def test_rendered_views_of_clean_drafts_pass(self):
+        for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):
+            with self.subTest(draft=name):
+                source = GOOD if path is None else path.read_text(encoding="utf-8")
+                views = dict(render_views(source))
+                self.assertEqual(set(views), {"rendered:report.pdf", "rendered:report.html"})
+                for view, text in views.items():
+                    self.assertTrue(text.strip(), view)
+                    if path is None:
+                        self.assertEqual(inspect_view(text), [], view)
+
+    def test_rendered_view_keeps_proposal_sections(self):
+        views = dict(render_views(GOOD.replace("Content.", "50 USD")))
+        self.assertEqual({rule for rule, _, _ in inspect_view(views["rendered:report.pdf"])}, {"currency-outside-offer"})
+        views = dict(render_views(GOOD.replace("Talk.", "50 USD")))
+        self.assertEqual({rule for rule, _, _ in inspect_view(views["rendered:report.pdf"])}, {"price-in-offer"})
+
+    def test_source_and_rendered_findings_are_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "report.md").write_text(GOOD.replace("Talk.", "50 USD"), encoding="utf-8")
+            _, result = self.run_lint(root)
+            self.assertEqual([(f["rule"], f["file"]) for f in result["findings"]], [("price-in-offer", "report.md")])
