@@ -13,7 +13,7 @@ from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.confusables import CONFUSABLES
 from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton, hebrew_pattern
-from arf.lint.rendered import inspect_view, render_views
+from arf.lint.rendered import html_text, inspect_view, render_views
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
@@ -826,6 +826,27 @@ class RenderThenLintTests(unittest.TestCase):
                     self.assertIn(case["rule"], {rule for rule, _, _ in inspect_view(views[case["view"]])})
                     if not case["source_hard"]:
                         self.assertIn(case["view"], {f["file"] for f in result["findings"] if f["rule"] == case["rule"]})
+
+    def test_html_view_reads_reader_visible_attributes(self):
+        def page(section, body):
+            return (f"<html><head><title>Ben is a team leader</title></head><body><h2>{section}</h2>"
+                    f"<p>{body}</p><h2>9. Other</h2><p>x</p></body></html>")
+        cases = (
+            ("3. Context", '<abbr title="Ben is a team leader">note</abbr>', "ben-role"),
+            ("3. Context", '<span title="price list">note</span>', "price-in-offer"),
+            ("5. Talk", '<span title="50 USD">here</span>', "price-in-offer"),
+            ("3. Context", '<img alt="Ben is a team leader" src="figure.png">', "ben-role"),
+            ("3. Context", '<span aria-label="tech lead">here</span>', "ben-role"),
+            ("3. Context", '<span hidden aria-description="tech lead">x</span>', "ben-role"),
+            ("3. Context", '<input placeholder="price list">', "price-in-offer"),
+            ("3. Context", '<select><option label="tech lead" value="a">a</option></select>', "ben-role"),
+            ("3. Context", '<abbr title="Internal note">note</abbr>', None),
+            ("3. Context", '<span data-note="tech lead" class="price list">x</span>', None),
+        )
+        for section, body, rule in cases:
+            with self.subTest(body=body):
+                found = {found_rule for found_rule, _, _ in inspect_view(html_text(page(section, body)))}
+                self.assertEqual(found, {rule} if rule else set())
 
     def test_rendered_views_of_clean_drafts_pass(self):
         for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):

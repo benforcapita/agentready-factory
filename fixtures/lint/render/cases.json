@@ -1,5 +1,5 @@
 {
-  "about": "PRO-561 render-then-lint fixtures. Each probe replaces the placeholder sentence of a section in the unit-test draft, is rendered by T5 and then linted. source_hard says whether the Markdown pre-check alone (--source-only) already hard-fails with that rule; rule is the hard fail the rendered view must report (null: must pass).",
+  "about": "PRO-561 render-then-lint fixtures. Each probe replaces the placeholder sentence of a section in the unit-test draft, is rendered by T5 and then linted. source_hard says whether the Markdown pre-check alone (--source-only) already hard-fails with that rule; rule is the hard fail the rendered view must report (null: must pass). N2-alt-role lands in the PDF view because WeasyPrint lays out alt text when the image does not load; the HTML view reads it too (RenderThenLintTests.test_html_view_reads_reader_visible_attributes).",
   "cases": [
     {"id": "B3-footnote-role", "section": "3", "probe": "הערה חשובה[^בן שימש כראש צוות פיתוח]", "source_hard": true, "rule": "ben-role", "view": "rendered:report.pdf"},
     {"id": "B3-reflabel-role", "section": "3", "probe": "ראו [הערה][Ben is a dev team manager]", "source_hard": true, "rule": "ben-role", "view": "rendered:report.pdf"},
@@ -15,7 +15,7 @@
     {"id": "N2-title-role", "section": "3", "probe": "See <abbr title=\"Ben is a team leader\">note</abbr>.", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
     {"id": "N2-title-money", "section": "5", "probe": "Talk <span title=\"50 USD\">here</span>.", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
     {"id": "N2-title-pricing", "section": "3", "probe": "See <span title=\"price list\">note</span>.", "source_hard": false, "rule": "price-in-offer", "view": "rendered:report.html"},
-    {"id": "N2-alt-role", "section": "3", "probe": "<img alt=\"Ben is a team leader\" src=\"figure.png\">", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
+    {"id": "N2-alt-role", "section": "3", "probe": "<img alt=\"Ben is a team leader\" src=\"figure.png\">", "source_hard": false, "rule": "ben-role", "view": "rendered:report.pdf"},
     {"id": "N2-aria-label-role", "section": "3", "probe": "See <span aria-label=\"tech lead\">here</span>.", "source_hard": false, "rule": "ben-role", "view": "rendered:report.html"},
     {"id": "N2-title-innocuous", "section": "3", "probe": "See <abbr title=\"Internal note\">note</abbr>.", "source_hard": false, "rule": null, "view": null}
   ]
