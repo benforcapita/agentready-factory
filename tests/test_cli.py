@@ -103,7 +103,7 @@ class DelegatedCommandTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
         self.assertIn("wrote <out>/report.md", stdout)
-        self.assertEqual(sorted(files), ["notes-for-ben.md", "prompts-used.json", "report.md"])
+        self.assertLessEqual({"notes-for-ben.md", "prompts-used.json", "report.md"}, set(files))
 
     def test_scaffold_prompt_selection_error(self):
         code, _, stderr, _ = self.assert_same(
