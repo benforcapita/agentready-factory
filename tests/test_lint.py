@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import string
 import subprocess
 import sys
 import tempfile
@@ -9,8 +10,10 @@ import zlib
 
 from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
+from arf.lint.confusables import CONFUSABLES
+from arf.lint.matching import MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
-from arf.lint.rules import DASH_LIKES, MESSAGES, normalize_for_matching
+from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
@@ -456,6 +459,86 @@ class LintTests(unittest.TestCase):
                 with self.subTest(control=phrase):
                     self.write(root, "report.md", GOOD.replace("Talk.", phrase))
                     self.assertEqual(self.cli(root).returncode, 0)
+
+    def test_qa_rework4_probes(self):
+        cases = [(phrase, "ben-role") for phrase in (
+            "team leads", "engineering managers", "R&D managers", "dev team managers",
+            "development team managers", "teamlead", "engineeringmanager", "R&Dmanager",
+            "devteam manager", "R and D manager", "ראשי צוות", "מנהלי צוות פיתוח",
+            "team⁓lead", "dev⁓team⁓manager", "team<!-- --> lead", "team<b> </b>lead",
+            "tеam lеad", "τeam lead", "ᴅᴇᴠ ᴛᴇᴀᴍ ᴍᴀɴᴀɢᴇʀ",
+        )]
+        cases.extend((phrase, "price-in-offer") for phrase in (
+            "quotation", "quotations", "price quotation", "per_hour", "per/hour", "per.hour",
+            "perhour", "hourly_rate", "hourly/rate", "hourly.rate", "hourlyrate", "per⁓hour",
+            "hourly⁓rate", "per<!-- --> hour", "per<span> </span>hour", "price<i> </i>list",
+            "50 EUR", "50 GBP", "50 JPY", "50 CHF", "50 AUD", "50 CAD", "50 SGD", "50 AED",
+            "HK$", "NZ$", "A$", "C$", "R$", "price: list", "price = list",
+            "ᵖʳⁱᶜᵉ ˡⁱˢᵗ",
+            "50 UЅD", "５０ ＥＵＲ", "٥٠ EᵁR", "50 U<!-- -->SD",
+        ))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for phrase, expected in cases:
+                with self.subTest(probe=phrase):
+                    self.write(root, "report.md", GOOD.replace("Talk.", phrase))
+                    process = self.cli(root)
+                    self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
+                    before = (root / "lint.json").read_bytes()
+                    self.assertEqual({f["rule"] for f in json.loads(before)["findings"]}, {expected})
+                    self.assertEqual(self.cli(root).returncode, 1)
+                    self.assertEqual((root / "lint.json").read_bytes(), before)
+
+    def test_skeleton_generated_character_classes(self):
+        separators = {chr(code) for code in range(sys.maxunicode + 1)
+                      if unicodedata.category(chr(code)) in {"Cf", "Pd"} or chr(code).isspace()}
+        separators.update(DASH_LIKES + "⁓“”‘’«»\u0301\u05b0\u093e\u0940\u20dd\u20e3" + string.punctuation)
+        confusables = {}
+        for char in CONFUSABLES:
+            confusables.setdefault(Skeleton(char).text, []).append(char)
+        for rule, phrases in (("price-in-offer", PRICING_PHRASES), ("ben-role", ROLE_PHRASES)):
+            matcher = PhraseMatcher(phrases)
+            self.assertNotIn(rule, WARNINGS)
+            for phrase in phrases:
+                self.assertIn(rule, rules(phrase, "notes-for-ben.md"))
+                for position in range(1, len(phrase)):
+                    for separator in sorted(separators):
+                        probe = phrase[:position] + separator + phrase[position:]
+                        self.assertTrue(list(matcher.finditer(probe)), (rule, phrase, position, repr(separator)))
+                for position, char in enumerate(phrase):
+                    base = Skeleton(char).text
+                    if not base:
+                        continue
+                    for confusable in confusables.get(base, ()):
+                        probe = phrase[:position] + confusable + phrase[position + 1:]
+                        self.assertTrue(list(matcher.finditer(probe)), (rule, phrase, position, confusable))
+        money = MoneyMatcher()
+        for position in range(1, len("50 USD")):
+            for separator in sorted(separators):
+                probe = "50 USD"[:position] + separator + "50 USD"[position:]
+                self.assertTrue(list(money.finditer(probe)), repr(probe))
+
+    def test_skeleton_boundaries_visible_text_and_index_map(self):
+        matcher = PhraseMatcher(PRICING_PHRASES + ROLE_PHRASES)
+        for innocent in ("", "paper hour", "deviation manager", "team leadership", "engineering managerial",
+                         "priceless", "pricelistening", "retainerstatement", "quotationary", "steam leads",
+                         "תקציר מנהלים", "מי שמנהל את האתר", "paper<!-- --> hour",
+                         "pa<b>per</b> hour", "xteam lead", "team leadx", "x&#116;eam lead",
+                         "[context](https://example.test/pricelist)"):
+            self.assertEqual(list(matcher.finditer(innocent)), [], innocent)
+            self.assertNotIn("ben-role", rules(innocent, "notes-for-ben.md"))
+            self.assertNotIn("price-in-offer", rules(innocent, "notes-for-ben.md"))
+        for source in ("prefix team<!-- --> lead suffix", "prefix tеam<b> </b>lead suffix",
+                       "prefix t&#101;am lead suffix", "prefix ᵗᵉᵃᵐ lead suffix"):
+            found = list(matcher.finditer(source))
+            self.assertEqual(len(found), 1, source)
+            self.assertEqual(found[0][0], source[found[0].start():found[0].end()])
+            self.assertEqual(found[0].start(), len("prefix "))
+            self.assertEqual(found[0].end(), len(source) - len(" suffix"))
+            with self.assertRaises(IndexError):
+                found[0][1]
+        self.assertEqual(list(MoneyMatcher().finditer("")), [])
+        self.assertEqual(list(matcher.finditer("team<broken")), [])
 
     def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -40,20 +40,27 @@ reviewed mode. Seeded drafts carry `<!-- arf:draft run=lint-fixture -->`.
 
 `placeholder-left` was removed: it is not an LLD rule and required a golden ack.
 
-Matching uses NFKC, removes all Unicode Cf format and Mn/Mc/Me combining marks,
-then maps every Unicode Pd dash to ASCII `-`. The small additional dash-like set
-U+02D7, U+2043, U+2212 and U+2796 also maps to `-`; NFKC maps superscript and
-subscript minus through U+2212.
-Semantic excerpts use this matching text, so invisible/fullwidth variants have
-stable fingerprints equivalent to their plain forms. Input hashes still cover
-the original bytes, and line numbers are preserved. Pricing phrases allow
-whitespace/dash runs (`[\s-]+`) and English plurals (fees, discounts, retainers,
-hourly rates). The same separators apply between words in hard-rule phrases.
-Price-list phrases additionally accept compounds and underscore/dot/slash
-separators. Intra-word whitespace in `price` and `dev` is tolerated so combining
-mark probes with residual spaces still fail. Currency amounts include US$/CA$
-prefixes and adjacent ISO codes such as ILS50, without matching inside English
-words. Input files are never normalized on disk.
+Pricing and role phrases use indexed visible-text skeletons: HTML tags/comments
+and Markdown link destinations are excluded; entities are decoded. NFKC and
+casefold precede a pinned stdlib-only UTS #39 letter-confusables table, including
+Cyrillic/Greek, Hebrew/Latin lookalikes and small capitals. Compatibility letters
+(including superscripts) and decomposed accents fold to their base letters.
+Only Unicode L*/N* survive: every Cf, Mn/Mc/Me, Pd, whitespace and punctuation
+separator disappears, including U+2053. English plurals and Hebrew inflections
+are explicit phrase variants; separators inside words are accepted.
+Skeleton spans map back to matching-source positions. Both endpoints must be
+visible original word boundaries, so `paper hour` cannot match `per hour`, nor
+can a match split a compatibility ligature. Excerpts retain the matched source
+span. Existing artifact preprocessing still folds Cf/marks/dashes for stable
+legacy fingerprints; hashes always cover original bytes. Files are not changed.
+Money uses the same folding/index map while retaining currency symbols; Unicode
+decimal digits, punctuation-separated amounts, adjacent ISO codes and the
+EUR/GBP/JPY/CHF/AUD/CAD/SGD/AED/HKD/NZD/BRL and HK$/NZ$/A$/C$/R$ forms are covered.
+Bounded limits: the confusable table is finite, not visual OCR; arbitrary homoglyph
+sequences, phonetic transliteration and full Markdown layout are not inferred.
+Unfinished HTML tokens are treated as literal text, failing closed for separator
+insertion probes rather than allowing a stray `<` to swallow a prohibited phrase.
+Other non-phrase rules retain their existing syntax-aware regexes and normalization.
 
 ## Input contracts and skips
 

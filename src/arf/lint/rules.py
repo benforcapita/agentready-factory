@@ -7,6 +7,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from .document import HTMLDocument, headings, plain, sections, tables
 from .markers import DRAFT_COMMENT, DRAFT_MARKER
+from .matching import MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES
 
 WARNINGS = {"currency-outside-offer", "generic-price", "pdf-length", "too-many-findings", "public-side-effect"}
 MESSAGES = {
@@ -44,12 +45,10 @@ SOURCE_ALIASES = {
     "is-agentic": r"is-agentic", "webfetch": r"WebFetch", "tinyfish": r"TinyFish", "jina": r"Jina",
     "validator": r"validator\.schema\.org", "sitemap": r"sitemap|מפת[\s-]+האתר|מפת[\s-]+אתר", "robots": r"robots\.txt",
 }
-CURRENCY = r"(?:₪|(?:US|CA)?\$|€|£|(?<![A-Za-z_])(?:NIS|ILS|USD)(?![A-Za-z_])|ש[\"״']ח)"
-AMOUNT = r"\d[\d,.]*(?:\s*[–-]\s*\d[\d,.]*)?"
-MONEY = re.compile(rf"(?:{AMOUNT}\s*{CURRENCY}|{CURRENCY}\s*{AMOUNT})", re.I)
-PRICING = re.compile(r"הצעת[\s-]+מחיר|תמחור|עלות[\s-]+השירות|מחירון|\b(?:p\s*r\s*i\s*c\s*e[\s_./-]*lists?|pricing|quotes?|fees?|per[\s-]+hour|hourly[\s-]+rates?|discounts?|retainers?)\b", re.I)
+MONEY = MoneyMatcher()
+PRICING = PhraseMatcher(PRICING_PHRASES)
 GENERIC_PRICE = re.compile(r"מחיר|\b(?:price|cost)\b", re.I)
-ROLE = re.compile(r"ראש[\s-]+צו{1,2}ת(?:[\s-]+פי?תוח)?|מנהל[\s-]+צו{1,2}ת[\s-]+פי?תוח|מנהל[\s-]+פי?תוח|\b(?:d\s*e\s*v(?:elopment)?[\s-]+team[\s-]+manager|engineering[\s-]+manager|R&D[\s-]+manager|team[\s-]+lead)\b", re.I)
+ROLE = PhraseMatcher(ROLE_PHRASES)
 IMPLEMENTATION = re.compile(r"<script\b|application/ld\+json|openingHoursSpecification|@type\b|Disallow:|User-agent:|\.htaccess\b|wp-config\b|add[\s-]+the[\s-]+following|הוסיפו[\s-]+את[\s-]+הקוד", re.I)
 SECRET = re.compile(
     r"\bAKIA[A-Z0-9]{16,}|\b(?:sk_live_|sk-)[A-Za-z0-9_-]{16,}"
