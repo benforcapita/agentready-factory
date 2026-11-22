@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 GOLDEN = ROOT / "fixtures" / "golden" / "lehamim"
 ENGLISH = ROOT / "fixtures" / "render" / "en" / "report.md"
 GOLDEN_TITLE = "דוח AgentReady — מאפיית לחמים"
+ENTITY_REPORT = "# בדיקה\n\nשלום AT&T ו־Ben & Jerry's ו־A < B ו־A > B ו־https://example.com/?a=1&b=2.\n"
+ENTITY_TEXTS = ("AT&T", "Ben & Jerry's", "A < B", "A > B", "https://example.com/?a=1&b=2")
 POPPLER = all(shutil.which(tool) for tool in ("pdfinfo", "pdffonts", "pdftotext"))
 BIDI_CONTROLS = re.compile("[\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
@@ -106,6 +108,13 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertIn('<span dir="ltr" class="en">example.com</span>.', rendered)
         self.assertNotIn("\u200f", rendered)
 
+    def test_hebrew_latin_wrapping_keeps_html_entities_whole(self):
+        rendered = render_html(ENTITY_REPORT, draft_marker=False)
+        for wrapped in ("AT&amp;T", "Ben &amp; Jerry's", "A &lt; B", "A &gt; B", "https://example.com/?a=1&amp;b=2"):
+            self.assertIn(f'<span dir="ltr" class="en">{wrapped}</span>', rendered)
+        self.assertNotRegex(rendered, r"&(amp|lt|gt)</span>|</span>;|&amp;amp;")
+        self.assertNotIn('class="en">amp<', rendered)
+
     def test_english_is_ltr_without_latin_wrapping(self):
         code, _, stderr = self.render(ENGLISH, "--out", self.out, "--lang", "en", "--no-pdf")
         self.assertEqual(code, 0, stderr)
@@ -190,6 +199,13 @@ class PdfTests(RenderCommand, unittest.TestCase):
         pdf = self.render_pdf_fixture(ENGLISH, "--lang", "en")
         self.assert_a4_with_embedded_fonts(pdf, 1, 4)
         self.assertIn("Executive summary", self.text(pdf))
+
+    def test_hebrew_pdf_text_keeps_ampersands_angle_brackets_and_query_strings(self):
+        source = self.out / "entity.md"
+        source.write_text(ENTITY_REPORT, encoding="utf-8")
+        text = self.text(self.render_pdf_fixture(source, "--lang", "he", "--final"))
+        for phrase in ENTITY_TEXTS:
+            self.assertIn(phrase, text)
 
     def test_external_resources_are_refused(self):
         pdf = self.out / "report.pdf"

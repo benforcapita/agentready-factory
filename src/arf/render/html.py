@@ -58,13 +58,17 @@ LANGUAGES = {
     "en": Language("ltr", "left", "Executive summary", False),
 }
 
-_TOKEN = r"[A-Za-z0-9./@:_+\-~'\"]*[A-Za-z][A-Za-z0-9./@:_+\-~]*"
-_LATIN_RUN = re.compile(r"(?:/?" + _TOKEN + r")(?:[ ,/&]+(?:/?" + _TOKEN + r"))*|/|0\d{2}-\d{3}-\d{4}")
+_TOKEN = r"[A-Za-z0-9./@:_+\-~'\"?=&%#]*[A-Za-z][A-Za-z0-9./@:_+\-~?=&%#]*"
+_LATIN_RUN = re.compile(r"(?:/?" + _TOKEN + r")(?:[ ,/&<>]+(?:/?" + _TOKEN + r"))*|/|0\d{2}-\d{3}-\d{4}")
 _PLACEHOLDER = re.compile(r"[A-Z][A-Z0-9_]*")
 _TAG = re.compile(r"(<[^>]+>)")
 
 
-def _wrap_latin_runs(text: str) -> str:
+def _wrap_latin_runs(escaped: str) -> str:
+    """Wrap Latin runs of an escaped HTML text node, matching on the unescaped text so
+    entities such as &amp; are never split, then re-escaping every piece."""
+    text = html.unescape(escaped)
+
     def wrap(match: re.Match) -> str:
         run = match.group(0)
         if run == "/":
@@ -87,9 +91,10 @@ def _wrap_latin_runs(text: str) -> str:
             run = run[:-1]
         if not run:
             return match.group(0)
-        return f'<span dir="ltr" class="en">{run}</span>{tail}'
+        return f'\0{run}\1{tail}'
 
-    return _LATIN_RUN.sub(wrap, text)
+    marked = html.escape(_LATIN_RUN.sub(wrap, text.replace("\0", "").replace("\1", "")), quote=False)
+    return marked.replace("\0", '<span dir="ltr" class="en">').replace("\1", "</span>")
 
 
 def _first_heading(body: str) -> str:
