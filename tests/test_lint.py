@@ -628,6 +628,21 @@ class LintTests(unittest.TestCase):
                     self.assertEqual(self.cli(root).returncode, 1)
                     self.assertEqual((root / "lint.json").read_bytes(), before)
 
+    def test_n_a_hebrew_plural_and_bare_pricing_forms(self):
+        positives = ("הצעות מחיר", "בהצעות מחיר.", "שלחנו הצעות מחיר.", "הצעות המחיר", "בהצעות המחיר.",
+                     "עלות שירות", "בעלות שירות.", "עלות שירותים", "עלות השירות", "הצעת המחיר")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for probe in positives:
+                with self.subTest(probe=probe):
+                    self.write(root, "report.md", GOOD.replace("Talk.", probe))
+                    process = self.cli(root)
+                    self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
+                    findings = json.loads((root / "lint.json").read_bytes())["findings"]
+                    self.assertEqual({(f["rule"], f["level"]) for f in findings}, {("price-in-offer", "hard_fail")})
+        for probe in ("ההצעה מחירים", "הצעה למחיר", "עלות גבוהה של שירות"):
+            self.assertNotIn("price-in-offer", rules(probe, "notes-for-ben.md"))
+
     def test_pdf_marker_page_text_and_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

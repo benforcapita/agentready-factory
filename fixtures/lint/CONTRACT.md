@@ -48,6 +48,8 @@ Cyrillic/Greek, Hebrew/Latin lookalikes and small capitals. Compatibility letter
 Only Unicode L*/N* survive: every Cf, Mn/Mc/Me, Pd, whitespace and punctuation
 separator disappears, including U+2053. English plurals and Hebrew inflections
 are explicit phrase variants; separators inside words are accepted.
+Non-final Hebrew construct words also accept their plural (ת→ות, e.g.
+הצעות מחיר), and a leading definite ה on later words is optional (עלות שירות).
 Skeleton spans map back to matching-source positions. Both endpoints must be
 visible original word boundaries, so `paper hour` cannot match `per hour`, nor
 can a match split a compatibility ligature. Excerpts retain the matched source
