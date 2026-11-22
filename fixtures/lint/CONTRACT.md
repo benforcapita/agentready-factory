@@ -105,14 +105,22 @@ logic as the source lint. No rule definition changes.
 - `rendered:report.pdf`: the text WeasyPrint lays out on the PDF pages, after CSS
   (class selectors, generated content, `visibility`). This is what B3 footnote
   and reference-label text becomes once rendered.
-- `rendered:report.html`: every text node and HTML comment in the delivered HTML
-  body, including `hidden`, `display:none` and `visibility:hidden` subtrees;
-  `<script>`, `<style>` and `<head>` are not text.
+- `rendered:report.html`: every text node, HTML comment and reader-visible
+  attribute value in the delivered HTML body, including `hidden`, `display:none`
+  and `visibility:hidden` subtrees; `<script>`, `<style>` and `<head>` are not
+  text. Reader-visible attributes are `title`, `alt`, `aria-label`,
+  `aria-description`, `aria-roledescription`, `aria-placeholder`,
+  `aria-valuetext`, `placeholder`, `value` on `input`/`button`/`option` and
+  `label` on `option`/`optgroup`/`track`. Their text is linted at the end of the
+  enclosing block, so the same section logic applies.
 
 Hidden-HTML rule (N2): hiding is not an exemption. `report.html` is itself a
 customer deliverable, and hidden text and comments stay readable through view
 source, copy, search, reader modes and AI agents. A rule match inside hidden HTML
-is the same finding as in visible text. Hidden text that matches no rule passes.
+is the same finding as in visible text. The same holds for attribute text the
+reader can see (hover tooltip, image fallback, form text) or that assistive tech,
+view source and AI agents read: it is customer-visible and linted like hidden
+text. Hidden or attribute text that matches no rule passes.
 
 A rendered finding is reported (file `rendered:report.pdf` or
 `rendered:report.html`, line in that view) only when `report.md` or `report.html`

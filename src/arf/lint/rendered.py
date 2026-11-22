@@ -13,12 +13,44 @@ PDF_VIEW = "rendered:report.pdf"
 HTML_VIEW = "rendered:report.html"
 
 
+# Attribute text a reader sees (tooltip, image fallback, form text) or assistive tech reads.
+READER_ATTRIBUTES = ("title", "alt", "aria-label", "aria-description", "aria-roledescription",
+                     "aria-placeholder", "aria-valuetext", "placeholder")
+FORM_ATTRIBUTES = {"input": ("value",), "button": ("value",), "option": ("value", "label"),
+                   "optgroup": ("label",), "track": ("label",)}
+
+
 class DeliveredHTML(HTMLDocument):
-    """Every text node and comment of the HTML body, including CSS-hidden subtrees."""
+    """Every text node, comment and reader-visible attribute of the HTML body, incl. CSS-hidden subtrees."""
+
+    def __init__(self):
+        super().__init__()
+        self.attribute_text = []
+
+    def emit(self, text):
+        if self.attribute_text and text.startswith("\n\n"):
+            pending, self.attribute_text = self.attribute_text, []
+            super().emit("\n" + "\n".join(pending))
+        super().emit(text)
+
+    def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
+        if self.hidden:
+            return
+        names = READER_ATTRIBUTES + FORM_ATTRIBUTES.get(tag, ())
+        for name, value in attrs:
+            # Attribute text joins the end of its block, so the section and proposal logic still apply.
+            value = re.sub(r"^[\s#]+", "", re.sub(r"\s+", " ", value or "")).strip()
+            if name in names and value:
+                self.attribute_text.append(value)
 
     def handle_comment(self, data):
         if not self.hidden:
             self.emit("\n\n" + data + "\n\n")
+
+    def close(self):
+        super().close()
+        self.emit("\n\n")
 
 
 def html_text(document):

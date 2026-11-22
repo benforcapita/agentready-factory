@@ -790,10 +790,6 @@ class LintTests(unittest.TestCase):
             self.assertEqual((root / "lint.json").read_bytes(), first)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RenderThenLintTests(unittest.TestCase):
     PLACEHOLDER = {"3": "Content.", "5": "Talk."}
 
@@ -854,3 +850,7 @@ class RenderThenLintTests(unittest.TestCase):
             (root / "report.md").write_text(GOOD.replace("Talk.", "50 USD"), encoding="utf-8")
             _, result = self.run_lint(root)
             self.assertEqual([(f["rule"], f["file"]) for f in result["findings"]], [("price-in-offer", "report.md")])
+
+
+if __name__ == "__main__":
+    unittest.main()
