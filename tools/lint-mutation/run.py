@@ -158,6 +158,7 @@ def summarize(args, cases, results, started):
 
 
 def main():
+    raise SystemExit("PRO-651 CI crash simulation: exit before any JSON (revert me)")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=567)
     parser.add_argument("--budget-seconds", type=int, default=90)
