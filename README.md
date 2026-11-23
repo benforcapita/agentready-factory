@@ -145,3 +145,36 @@ and `Requested by` options beyond `ben` (§3.1 says "bot slugs + ben").
 
 `fixtures/notion/recorded` passes. `fixtures/notion/renamed-property` is the same
 copy with the Runs `Status` property renamed to `Run status` and fails.
+
+## Orchestrator (T8a)
+
+```sh
+# from the repository root (fixture paths are relative; override with --golden/--ack)
+python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out /tmp/arf-dry-run --duplicate
+python -m arf.orchestrator dry-run fixtures/requests/sample.yaml --out /tmp/arf-blocked --force-lint-failure
+```
+
+`src/arf/orchestrator` holds the LLD §4 Task and Run state machines. Every Task
+`Status` from §4.1 and every Run `Status` has an explicit transition table;
+any other write raises `IllegalTransition`. The happy path is Requested →
+Claimed → Collecting evidence → Drafting → Rendering → Checking → Needs review.
+
+- **Idempotency key:** `domain|Israel date|trigger|Musy message_id` (`-` without
+  a Musy lead; `www.` and case are folded). A repeat request of an open
+  (queued/running) or finished Task reuses its latest Run and is recorded as a
+  `Duplicate` Task; `force: true` starts a new Task and Run instead.
+- **Fix loop:** a failed lint sends the Task back to Drafting with the failing
+  findings. After 2 fix attempts the Run ends `guardrail_blocked` and the Task
+  `Guardrail blocked`. A step exception ends the Run `failed` and the Task `Failed`.
+- **Retries (LLD §4.1/§4.2):** a repeat of a `Failed` or `Guardrail blocked` Task
+  starts no Run unless it has `force: true`; it is recorded as `Duplicate` and
+  `Submission.needs_force` is set. With `force: true` (or `Orchestrator.retry`)
+  the same Task returns to `Claimed` with a new Run whose `Retry of` is the
+  previous Run. Finished Runs (`succeeded`, `guardrail_blocked`, `failed`,
+  `cancelled`) reject every further write.
+
+`dry-run` uses an in-memory store that logs each Tasks/Runs write with Notion
+property names, and recorded steps: the Lehamim golden `report.md` with a draft
+marker, `render_html`, and the real linter with the golden acks. It skips DNS
+site validation and makes no network or Notion calls. Drive upload, Artifacts
+rows, the Command Center row and the result comment are T8b (PRO-449).
