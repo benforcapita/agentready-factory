@@ -111,7 +111,8 @@ class HtmlTests(RenderCommand, unittest.TestCase):
     def test_hebrew_latin_wrapping_leaves_style_and_script_contents_alone(self):
         rendered = render_html('<style>.h>b{display:none}</style><script>a = "x";</script>\n\nטקסט ABC\n',
                                draft_marker=False)
-        self.assertIn('<style>.h>b{display:none}</style><script>a = "x";</script>', rendered)
+        self.assertIn('<style>.h>b{display:none}</style>', rendered)
+        self.assertIn('<script>a = "x";</script>', rendered)
         self.assertIn('טקסט <span dir="ltr" class="en">ABC</span>', rendered)
 
     def test_hebrew_latin_wrapping_keeps_html_entities_whole(self):
