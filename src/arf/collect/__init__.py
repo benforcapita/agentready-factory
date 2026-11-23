@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from .doh import resolve_doh
 from .transport import BudgetExhausted, GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
+from ..language import html_lang
 from ..validation import ipv4_literal
 
 
@@ -61,7 +62,7 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
 
     def request(url, ua):
         if sum(counts.values()) >= max_requests:
-            return "skipped_budget", "", "", b"", None
+            return "skipped_budget", "", "", b"", None, ""
         parts, name = target(url, policy)
 
         def reserve_attempt():
@@ -94,13 +95,14 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
                     break
                 body.extend(chunk)
             connection.remaining()
-            return response.status, response.getheader("Server", ""), response.getheader("CF-Ray", ""), bytes(body), response.getheader("Location")
+            return (response.status, response.getheader("Server", ""), response.getheader("CF-Ray", ""),
+                    bytes(body), response.getheader("Location"), response.getheader("Content-Language", ""))
         except BudgetExhausted:
-            return "skipped_budget", "", "", b"", None
+            return "skipped_budget", "", "", b"", None, ""
         except (OSError, http.client.HTTPException) as error:
             reason = "timeout" if isinstance(error, TimeoutError) or connection.expired.is_set() or monotonic() >= deadline else str(error)[:200]
             errors.append({"url": url, "reason": reason})
-            return "error", "", "", bytes(body), None
+            return "error", "", "", bytes(body), None, ""
         finally:
             timer.cancel()
             connection.close()
@@ -111,25 +113,65 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
             authority += f":{effective_port}"
         return f"{scheme}://{authority}{path}"
 
+    request_url = initial_url(hosts[0] if literal is not None else host, "/")
+    redirects = []
+    landing = {"request_url": request_url, "redirects": redirects}
+    url, status, body, language = request_url, None, b"", ""
+    for hop in range(config.MAX_REDIRECTS + 1):
+        try:
+            status, _, _, body, location, language = request(url, config.IDENTITIES[0][1])
+        except Refused as error:
+            if hop == 0:
+                raise
+            redirects.append({"url": url, "status": "refused", "reason": str(error)})
+            errors.append({"url": url, "path": "landing", "status": "refused", "reason": str(error)})
+            status, body, language = "refused", b"", ""
+            break
+        redirects.append({"url": url, "status": status, "location": location})
+        if status not in (301, 302, 303, 307, 308) or not location:
+            break
+        if hop == config.MAX_REDIRECTS:
+            errors.append({"url": url, "path": "landing", "reason": "landing redirect limit reached"})
+            break
+        try:
+            url = urljoin(url, location)
+        except ValueError as error:
+            errors.append({"url": url, "path": "landing", "status": "error", "reason": f"invalid redirect: {error}"})
+            status, body, language = "error", b"", ""
+            break
+    canonical = url if status == 200 else request_url
+    (out / "landing.html").write_bytes(body)
+    site_info = {"canonical_url": canonical,
+                 "html_lang": html_lang(body.decode("utf-8", "replace")) if status == 200 else None,
+                 "content_language": language or None, "final_status": status}
+    (out / "site.json").write_text(json.dumps(site_info, indent=2) + "\n", encoding="utf-8")
+    landing.update(site_info)
+    canonical_parts, canonical_host = target(canonical, policy)
+    canonical_origin = f"{canonical_parts.scheme}://{canonical_parts.netloc}"
+
     with (out / "probes.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(("domain", "path", "agent", "status", "server", "cf_ray", "size"))
         for name in hosts:
             for path in config.PATHS:
                 for agent, ua in config.IDENTITIES:
-                    status, server, ray, body, _ = request(initial_url(name, path), ua)
+                    status, server, ray, body, *_ = request(initial_url(name, path), ua)
                     writer.writerow((name, path, agent, status, server, ray, len(body)))
+        if (canonical_parts.path or "/") != "/":
+            for agent, ua in config.IDENTITIES:
+                status, server, ray, body, *_ = request(canonical, ua)
+                writer.writerow((canonical_host, "landing", agent, status, server, ray, len(body)))
 
     (out / "discovery").mkdir()
     with (out / "discovery.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(("domain", "path", "url", "status", "size", "body"))
-        for host_index, name in enumerate(hosts):
+        for host_index, name in enumerate([canonical_host]):
             for path_index, path in enumerate(config.DISCOVERY_PATHS):
-                url = initial_url(name, path)
+                url = canonical_origin + path
                 for hop in range(config.MAX_REDIRECTS + 1):
                     try:
-                        status, _, _, body, location = request(url, config.IDENTITIES[0][1])
+                        status, _, _, body, location, _ = request(url, config.IDENTITIES[0][1])
                     except Refused as error:
                         errors.append({"url": url, "domain": name, "path": path,
                                        "status": "refused", "reason": str(error)})
@@ -165,7 +207,7 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
         "requests_made": sum(counts.values()), "max_requests": max_requests,
         "request_count": {"total": sum(counts.values()), "per_host": dict(counts),
                           "requests_made": sum(counts.values()), "max_requests": max_requests},
-        "fake_ip_policy": fake_ip_policy, "doh_answers": doh_answers,
+        "fake_ip_policy": fake_ip_policy, "doh_answers": doh_answers, "landing": landing,
         "config": {"identities": dict(config.IDENTITIES), "paths": config.PATHS,
                    "discovery_paths": config.DISCOVERY_PATHS, "timeout": config.TIMEOUT,
                    "max_requests": max_requests, "fake_ip_policy": fake_ip_policy,

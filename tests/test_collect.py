@@ -16,6 +16,7 @@ from arf.cli import main
 from arf.collect import collect, config
 from arf.collect.doh import resolve_doh
 from arf.collect.transport import GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused
+from arf.language import detect_declared
 from arf.validation import InvalidRequest
 from tests.collect_server import closing_server, local_policy, resolve, server
 
@@ -43,13 +44,19 @@ class CollectTests(unittest.TestCase):
         self.assertEqual([tuple(row[:3]) for row in rows[1:]], expected)
         self.assertEqual(len(rows) - 1, 72)
         for row in rows[1:]:
-            self.assertEqual(row[3], "301" if row[1] == "/" else "200")
+            self.assertEqual(row[3], "200")
             self.assertEqual("CollectFixture/1.0", row[4])
             self.assertEqual(row[5:], ["fixture-ray", str(len(b"fixture body\n"))])
-        self.assertNotIn("/never-follow-probe", self.instance.paths)
+        site = json.loads((self.out / "site.json").read_text())
+        root = f"http://www.shop.example:{self.instance.server_port}/"
+        self.assertEqual(site, {"canonical_url": root, "html_lang": None, "content_language": None, "final_status": 200})
+        self.assertEqual(manifest["landing"]["redirects"], [{"url": root, "status": 200, "location": None}])
+        self.assertEqual((self.out / "landing.html").read_bytes(), b"fixture body\n")
+        with (self.out / "discovery.csv").open() as stream:
+            self.assertEqual({row["domain"] for row in csv.DictReader(stream)}, {"www.shop.example"})
         self.assertEqual(manifest["request_count"]["per_host"], dict(self.instance.hits))
         self.assertEqual(manifest["request_count"]["total"], sum(self.instance.hits.values()))
-        self.assertEqual(manifest["requests_made"], 82)
+        self.assertEqual(manifest["requests_made"], 78)
         self.assertEqual(manifest["max_requests"], 100)
         self.assertLessEqual(manifest["requests_made"], 100)
         for headers in self.instance.headers_seen:
@@ -74,11 +81,11 @@ class CollectTests(unittest.TestCase):
         with (self.out / "probes.csv").open() as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 72)
-        self.assertTrue(all(row["status"] != "skipped_budget" for row in rows[:10]))
-        self.assertEqual({row["status"] for row in rows[10:]}, {"skipped_budget"})
+        self.assertTrue(all(row["status"] != "skipped_budget" for row in rows[:9]))
+        self.assertEqual({row["status"] for row in rows[9:]}, {"skipped_budget"})
         with (self.out / "discovery.csv").open() as stream:
             rows = list(csv.DictReader(stream))
-        self.assertEqual(len(rows), 10)
+        self.assertEqual(len(rows), 5)
         self.assertEqual({row["status"] for row in rows}, {"skipped_budget"})
         self.assertEqual(json.loads((self.out / "errors.json").read_text()), [])
 
@@ -90,7 +97,7 @@ class CollectTests(unittest.TestCase):
         with (self.out / "discovery.csv").open() as stream:
             self.assertIn("skipped_budget", {row["status"] for row in csv.DictReader(stream)})
 
-    def assert_failed_budget(self, error_rows=5):
+    def assert_failed_budget(self, error_rows=4):
         manifest = json.loads((self.out / "evidence.json").read_text())
         self.assertEqual(manifest["requests_made"], 5)
         self.assertEqual(manifest["max_requests"], 5)
@@ -132,7 +139,7 @@ class CollectTests(unittest.TestCase):
                 with self.assertRaisesRegex(OSError, "errors.json"):
                     self.run_collect(port=port, resolver=resolver, max_requests=5)
         self.assertEqual(len(attempts), 5)
-        self.assert_failed_budget(error_rows=3)
+        self.assert_failed_budget(error_rows=2)
 
     def test_preconnect_refusal_does_not_consume_budget(self):
         self.instance.redirect = "http://private.example/"
@@ -145,8 +152,8 @@ class CollectTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "errors.json"):
             self.run_collect(resolver=resolving)
         manifest = json.loads((self.out / "evidence.json").read_text())
-        self.assertEqual(manifest["requests_made"], 82)
-        self.assertEqual(sum(self.instance.hits.values()), 82)
+        self.assertEqual(manifest["requests_made"], 78)
+        self.assertEqual(sum(self.instance.hits.values()), 78)
         self.assertNotIn("private.example", manifest["request_count"]["per_host"])
 
     def test_6to4_is_denied_even_if_ipaddress_considers_it_global(self):
@@ -254,14 +261,14 @@ class CollectTests(unittest.TestCase):
                 before = sum(self.instance.hits.values())
                 with self.assertRaisesRegex(OSError, "errors.json"):
                     self.run_collect(resolver=resolving)
-                self.assertEqual(sum(self.instance.hits.values()) - before, 82)
+                self.assertEqual(sum(self.instance.hits.values()) - before, 78)
                 errors = json.loads((self.out / "errors.json").read_text())
-                self.assertEqual(len(errors), 2)
+                self.assertEqual(len(errors), 1)
                 expected = "error" if destination == "http://[::1/" else "refused"
                 self.assertEqual({error["status"] for error in errors}, {expected})
                 with (self.out / "discovery.csv").open() as stream:
                     rows = list(csv.DictReader(stream))
-                self.assertEqual(sum(row["status"] == expected for row in rows), 2)
+                self.assertEqual(sum(row["status"] == expected for row in rows), 1)
                 self.assertEqual(rows[-1]["status"], "200")
 
     def test_public_ip_literals_have_no_www_variant(self):
@@ -274,7 +281,7 @@ class CollectTests(unittest.TestCase):
                                    port=self.instance.server_port,
                                    policy=GuardPolicy({host: ("127.0.0.1/32",)}))
                 self.assertEqual(manifest["hosts"], [host])
-                self.assertEqual(manifest["requests_made"], 41)
+                self.assertEqual(manifest["requests_made"], 42)
                 with (out / "probes.csv").open() as stream:
                     rows = list(csv.DictReader(stream))
                 self.assertEqual(len(rows), 36)
@@ -285,8 +292,101 @@ class CollectTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "errors.json"):
             self.run_collect()
         manifest = json.loads((self.out / "evidence.json").read_text())
-        self.assertEqual(manifest["request_count"]["total"], 88)
-        self.assertEqual(sum(self.instance.hits.values()), 88)
+        self.assertEqual(manifest["request_count"]["total"], 81)
+        self.assertEqual(sum(self.instance.hits.values()), 81)
+
+    def test_landing_redirect_to_other_host_and_path(self):
+        port = self.instance.server_port
+        landing = f"http://shop.example:{port}/he/"
+        page = b'<!doctype html><html dir="rtl" lang="he-IL"><body>shalom</body></html>'
+        self.instance.redirects = {("www.shop.example", "/"): landing}
+        self.instance.pages = {("shop.example", "/he/"): page}
+        self.instance.content_language = "he"
+        manifest = self.run_collect()
+        root = f"http://www.shop.example:{port}/"
+        self.assertEqual(manifest["landing"]["redirects"], [
+            {"url": root, "status": 301, "location": landing},
+            {"url": landing, "status": 200, "location": None}])
+        site = {"canonical_url": landing, "html_lang": "he-IL", "content_language": "he", "final_status": 200}
+        self.assertEqual(json.loads((self.out / "site.json").read_text()), site)
+        self.assertEqual({key: manifest["landing"][key] for key in site}, site)
+        self.assertEqual((self.out / "landing.html").read_bytes(), page)
+        with (self.out / "probes.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 81)
+        self.assertEqual([(row["domain"], row["agent"], row["status"]) for row in rows if row["path"] == "landing"],
+                         [("shop.example", agent, "200") for agent, _ in config.IDENTITIES])
+        self.assertTrue(all(row["status"] == "301" for row in rows
+                            if row["domain"] == "www.shop.example" and row["path"] == "/"))
+        with (self.out / "discovery.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual({row["domain"] for row in rows}, {"shop.example"})
+        self.assertTrue(all(row["url"].startswith(f"http://shop.example:{port}/") for row in rows))
+        self.assertEqual(manifest["requests_made"], 2 + 72 + 9 + 5)
+        files = {entry["path"]: entry for entry in manifest["files"]}
+        for name in ("landing.html", "site.json"):
+            data = (self.out / name).read_bytes()
+            self.assertEqual(files[name]["bytes"], len(data))
+            self.assertEqual(files[name]["sha256"], hashlib.sha256(data).hexdigest())
+
+    def test_landing_html_lang_ignores_data_lang(self):
+        self.instance.pages = {("www.shop.example", "/"): b'<html data-lang="en" lang="he-IL"><body></body></html>'}
+        self.instance.content_language = "he"
+        self.run_collect()
+        site = json.loads((self.out / "site.json").read_text())
+        self.assertEqual((site["html_lang"], site["content_language"]), ("he-IL", "he"))
+        self.assertEqual(detect_declared(site["html_lang"], site["content_language"], "shop.example")[:2],
+                         ("he", "html lang=he-IL"))
+
+    def test_landing_redirect_to_private_destination_is_refused(self):
+        for destination in ("http://private.example/", "http://127.0.0.1/"):
+            with self.subTest(destination=destination), TemporaryDirectory() as directory:
+                self.out = Path(directory) / "bundle"
+                self.instance.redirects = {("www.shop.example", "/"): destination}
+
+                def resolving(host, port, **kwargs):
+                    if host == "private.example":
+                        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", port))]
+                    return resolve(host, port, **kwargs)
+
+                with self.assertRaisesRegex(OSError, "errors.json"):
+                    self.run_collect(resolver=resolving)
+                manifest = json.loads((self.out / "evidence.json").read_text())
+                self.assertEqual(manifest["landing"]["redirects"][-1]["url"], destination)
+                self.assertEqual(manifest["landing"]["redirects"][-1]["status"], "refused")
+                errors = json.loads((self.out / "errors.json").read_text())
+                self.assertEqual([(error["path"], error["status"]) for error in errors], [("landing", "refused")])
+                site = json.loads((self.out / "site.json").read_text())
+                root = f"http://www.shop.example:{self.instance.server_port}/"
+                self.assertEqual((site["canonical_url"], site["final_status"]), (root, "refused"))
+                self.assertNotIn("private.example", manifest["request_count"]["per_host"])
+                self.assertEqual(manifest["requests_made"], 78)
+                with (self.out / "probes.csv").open() as stream:
+                    self.assertNotIn("landing", {row["path"] for row in csv.DictReader(stream)})
+
+    def test_worst_case_landing_and_discovery_stay_within_budget(self):
+        self.instance.redirect = "/llms-full.txt"
+        self.instance.redirects = {("www.shop.example", "/"): f"http://shop.example:{self.instance.server_port}/a",
+                                   ("shop.example", "/a"): "/b", ("shop.example", "/b"): "/c"}
+        with self.assertRaisesRegex(OSError, "errors.json"):
+            self.run_collect()
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        self.assertEqual(len(manifest["landing"]["redirects"]), 4)
+        self.assertTrue(manifest["landing"]["canonical_url"].endswith("/c"))
+        self.assertEqual(manifest["requests_made"], 4 + 72 + 9 + 4 + 4)
+        self.assertLessEqual(manifest["requests_made"], config.MAX_REQUESTS)
+        self.assertEqual(sum(self.instance.hits.values()), manifest["requests_made"])
+
+    def test_landing_redirect_limit_keeps_request_url(self):
+        self.instance.redirects = {("www.shop.example", "/"): "/1", ("www.shop.example", "/1"): "/2",
+                                   ("www.shop.example", "/2"): "/3", ("www.shop.example", "/3"): "/4"}
+        with self.assertRaisesRegex(OSError, "errors.json"):
+            self.run_collect()
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        self.assertEqual(len(manifest["landing"]["redirects"]), config.MAX_REDIRECTS + 1)
+        self.assertNotIn("/4", self.instance.paths)
+        self.assertEqual(manifest["landing"]["canonical_url"], f"http://www.shop.example:{self.instance.server_port}/")
+        self.assertEqual(manifest["landing"]["final_status"], 301)
 
     def test_body_cap(self):
         with patch.object(config, "MAX_BODY_BYTES", 4):
@@ -300,7 +400,7 @@ class CollectTests(unittest.TestCase):
                 site_port = self.instance.server_port if override is None else 1
                 manifest = collect(f"https://shop.example:{site_port}", Path(directory) / "bundle",
                                    resolver=resolve, scheme="http", port=override, policy=local_policy())
-                self.assertEqual(manifest["request_count"]["total"], 82)
+                self.assertEqual(manifest["request_count"]["total"], 78)
                 with (Path(directory) / "bundle" / "discovery.csv").open() as stream:
                     self.assertTrue(all(f":{self.instance.server_port}/" in row["url"]
                                         for row in csv.DictReader(stream)))
@@ -335,7 +435,7 @@ class CollectTests(unittest.TestCase):
             self.assertLess(monotonic() - started, 0.25)
         self.assertEqual(sum(self.instance.hits.values()), 0)
         errors = json.loads((self.out / "errors.json").read_text())
-        self.assertEqual([error["reason"] for error in errors], ["timeout", "timeout"])
+        self.assertEqual([error["reason"] for error in errors], ["timeout", "timeout", "timeout"])
 
     def test_dns_pinning_and_tls_hostname(self):
         records = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
@@ -408,10 +508,10 @@ class CollectTests(unittest.TestCase):
         with patch("arf.collect.transport.socket.socket", ProxySocket):
             manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(),
                                         fake_ip_policy="doh_verify", doh_resolver=doh)
-        self.assertEqual(len(connects), 82)
+        self.assertEqual(len(connects), 78)
         self.assertTrue(all(address[0] == "198.18.0.1" for address in connects))
-        self.assertEqual(sum(self.instance.hits.values()), 82)
-        self.assertEqual(doh.call_count, 82)
+        self.assertEqual(sum(self.instance.hits.values()), 78)
+        self.assertEqual(doh.call_count, 78)
         self.assertEqual(manifest["fake_ip_policy"], "doh_verify")
         expected = {host: sorted(doh.return_value) for host in ("shop.example", "www.shop.example")}
         self.assertEqual(manifest["doh_answers"], expected)
@@ -440,11 +540,11 @@ class CollectTests(unittest.TestCase):
                             self.run_collect(resolver=resolving, fake_ip_policy="doh_verify", doh_resolver=doh)
                     else:
                         self.run_collect(resolver=resolving, fake_ip_policy="doh_verify", doh_resolver=doh)
-                self.assertEqual(doh.call_count, 2)
+                self.assertEqual(doh.call_count, 1)
                 self.assertTrue(all(call.args[0] == "redirect.example" for call in doh.call_args_list))
                 manifest = json.loads((self.out / "evidence.json").read_text())
                 self.assertEqual(manifest["doh_answers"], {"redirect.example": [answer]})
-                self.assertEqual(manifest["requests_made"], 82 if answer == "10.0.0.1" else 84)
+                self.assertEqual(manifest["requests_made"], 78 if answer == "10.0.0.1" else 79)
 
 
     def test_bare_collect_refuses_fake_ip_with_runtime_hint(self):
@@ -488,10 +588,10 @@ class CollectTests(unittest.TestCase):
                 patch("arf.collect.doh.http.client.HTTPSConnection") as https:
             https.return_value.getresponse.side_effect = getresponse
             manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(), fake_ip_policy="doh_verify")
-        self.assertEqual(len(calls), 2 * 82 + 1)
-        self.assertEqual(manifest["requests_made"], 82)
-        self.assertEqual(manifest["request_count"]["per_host"], {"shop.example": 41, "www.shop.example": 41})
-        self.assertEqual(sum(self.instance.hits.values()), 82)
+        self.assertEqual(len(calls), 2 * 78 + 1)
+        self.assertEqual(manifest["requests_made"], 78)
+        self.assertEqual(manifest["request_count"]["per_host"], {"shop.example": 36, "www.shop.example": 42})
+        self.assertEqual(sum(self.instance.hits.values()), 78)
         self.assertEqual(manifest["doh_answers"]["shop.example"], ["2606:4700:4700::1111", "93.184.216.34"])
 
 
