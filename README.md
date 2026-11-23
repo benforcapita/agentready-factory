@@ -183,3 +183,29 @@ property names, and recorded steps: the Lehamim golden `report.md` with a draft
 marker, `render_html`, and the real linter with the golden acks. It skips DNS
 site validation and makes no network or Notion calls. Drive upload, Artifacts
 rows, the Command Center row and the result comment are T8b (PRO-449).
+
+## Publish (T8b)
+
+```sh
+python -m arf.publish dry-run fixtures/requests/sample.yaml --out /tmp/arf-publish
+python -m arf.publish dry-run fixtures/requests/sample.yaml --out /tmp/arf-publish-eval --eval
+```
+
+`arf.publish` runs after a passing check, before the Run is marked `succeeded`:
+
+- Writes `lint.json` and `manifest.json`, then uploads `report.md`, `report.html`,
+  `report.pdf`, `notes-for-ben.md`, `evidence.zip`, `lint.json`, `prompts-used.json`
+  and `manifest.json` (whichever exist) to `AgentReady reports/<date> <domain> <run id>/`.
+- The Drive interface has three methods: `find_folder`, `create_folder` and `upload`.
+  Files inherit the private folder's access; nothing changes who can open them.
+  `tests/test_publish.py` greps `src/arf/publish` for sharing and permission calls.
+- Records one Artifacts row per file (Kind, Audience, Drive link, Box path, SHA-256,
+  size, draft marker) and links them on the Run.
+- Creates a Command Center review row and sets the Task's `Command Center item`,
+  except when the Run's mode is `eval` (a forced retry keeps the Task's mode).
+- A publish error ends the Run `failed` and the Task `Failed`.
+- `result_comment` returns the result comment text and ends with
+  "Nothing sent; nobody contacted." The dry run writes it to `result-comment.md`;
+  nothing is posted.
+
+The dry run uses an in-memory Drive and Notion store and makes no network calls.

@@ -119,6 +119,36 @@ class ValidateTests(unittest.TestCase):
                     self.request["site"] = f"https://[{host}]"
                     self.assert_rejected("site: host must be public")
 
+    def test_rejects_ietf_protocol_assignments_before_checking_is_global(self):
+        # Policy: fail closed on all of 2001::/23, matching Python 3.12.0/3.12.3.
+        # Python 3.12.4+ and 3.13 treat the hosts below as global.
+        with patch.object(IPv6Address, "is_global", new_callable=PropertyMock) as is_global:
+            is_global.side_effect = AssertionError(
+                "2001::/23 must not consult IPv6Address.is_global"
+            )
+            for host in [
+                "2001:1::1", "2001:1::2", "2001:1::3",
+                "2001:3::1", "2001:3:ffff:ffff:ffff:ffff:ffff:ffff",
+                "2001:4:112::1", "2001:4:112:ffff:ffff:ffff:ffff:ffff",
+                "2001:20::1", "2001:2f:ffff:ffff:ffff:ffff:ffff:ffff",
+                "2001:30::1", "2001:3f:ffff:ffff:ffff:ffff:ffff:ffff",
+                "2001:2::1", "2001:10::1", "2001:1ff:ffff:ffff:ffff:ffff:ffff:ffff",
+            ]:
+                with self.subTest(host=host):
+                    self.request["site"] = f"https://[{host}]"
+                    self.assert_rejected("site: host must be public")
+
+    def test_rejects_ietf_protocol_assignment_resolver_answers(self):
+        for host in ["2001:1::1", "2001:3::1", "2001:4:112::1", "2001:20::1", "2001:30::1"]:
+            with self.subTest(host=host):
+                self.resolve.return_value = [
+                    (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (host, 0, 0, 0)),
+                ]
+                code, stdout, stderr = self.run_validate(SAMPLE)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(stdout, "")
+                self.assertIn("site: host must resolve only to public addresses", stderr)
+
     def test_rejects_non_public_embedded_ipv4_ranges(self):
         for ipv4 in [
             "0.0.0.0", "10.0.0.1", "100.64.0.1", "127.0.0.1",
@@ -143,7 +173,8 @@ class ValidateTests(unittest.TestCase):
 
     def test_accepts_public_ipv6_literals_without_dns(self):
         for host in [
-            "2606:4700:4700::1111", "::ffff:93.184.216.34",
+            "2606:4700:4700::1111", "2001:4860:4860::8888", "2001:470::1",
+            "2001:200::1", "::ffff:93.184.216.34",
             "::ffff:0:93.184.216.34", "64:ff9b::5db8:d822",
         ]:
             with self.subTest(host=host):
