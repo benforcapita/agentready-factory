@@ -1,0 +1,9 @@
+# Local registration of Lehamim against the mocked Eval Cases database.
+version: 1
+trigger: named_site
+site: https://example.com
+language: he
+mode: eval
+requested_by: chief-of-staff
+eval_case: https://example.com/eval-cases/lehamim
+fixture_bundle: ../golden/lehamim
