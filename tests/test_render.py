@@ -108,6 +108,12 @@ class HtmlTests(RenderCommand, unittest.TestCase):
         self.assertIn('<span dir="ltr" class="en">example.com</span>.', rendered)
         self.assertNotIn("\u200f", rendered)
 
+    def test_hebrew_latin_wrapping_leaves_style_and_script_contents_alone(self):
+        rendered = render_html('<style>.h>b{display:none}</style><script>a = "x";</script>\n\nטקסט ABC\n',
+                               draft_marker=False)
+        self.assertIn('<style>.h>b{display:none}</style><script>a = "x";</script>', rendered)
+        self.assertIn('טקסט <span dir="ltr" class="en">ABC</span>', rendered)
+
     def test_hebrew_latin_wrapping_keeps_html_entities_whole(self):
         rendered = render_html(ENTITY_REPORT, draft_marker=False)
         for wrapped in ("AT&amp;T", "Ben &amp; Jerry's", "A &lt; B", "A &gt; B", "https://example.com/?a=1&amp;b=2"):
