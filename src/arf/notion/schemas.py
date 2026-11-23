@@ -59,8 +59,8 @@ TASKS = Schema(
         Property("Trigger", "select", ("musy_lead", "named_site")),
         Property("Mode", "select", MODES),
         Property("Language", "select", ("he", "en")),
-        # LLD: "bot slugs + ben"; only ben is named.
-        Property("Requested by", "select", ("ben",)),
+        # LLD: "bot slugs + ben".
+        Property("Requested by", "select", ("ben", "chief-of-staff", "agentready-factory")),
         Property("Linear ticket", "url"),
         Property("Musy message", "rich_text"),
         Property("Musy scores", "rich_text"),

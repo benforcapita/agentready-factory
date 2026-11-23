@@ -299,6 +299,18 @@
             "name": "ben",
             "color": "default",
             "description": null
+          },
+          {
+            "id": "e77f8f74",
+            "name": "chief-of-staff",
+            "color": "default",
+            "description": null
+          },
+          {
+            "id": "2c391f02",
+            "name": "agentready-factory",
+            "color": "default",
+            "description": null
           }
         ]
       }
