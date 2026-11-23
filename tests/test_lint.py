@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures/lint"
 GOLDEN = ROOT / "fixtures/golden/lehamim"
 COMMENT = "<!-- arf:draft run=unit-test -->"
+LTR_VISUAL = "החילשל אל — הטויט · DRAFT"
+RTL_VISUAL = "DRAFT · החילשל אל — הטויט"
 CONFIG = dict(prepared_by="Ben — Independent advisor", contact_email="ben@example.test", employer="Example Employer")
 GOOD = COMMENT + """
 # AgentReady report
@@ -664,6 +666,12 @@ class LintTests(unittest.TestCase):
                     ("page Tj raw", page_pdf(compressed=False, operator="Tj"), 0),
                     ("page single quote", page_pdf(operator="'"), 0),
                     ("page double quote", page_pdf(operator='"'), 0),
+                    ("page LTR visual order", page_pdf(LTR_VISUAL), 0),
+                    ("page RTL visual order", page_pdf(RTL_VISUAL), 0),
+                    ("page Hebrew phrase only", page_pdf("טיוטה — לא לשליחה"), 1),
+                    ("page LTR Hebrew only", page_pdf("החילשל אל — הטויט"), 1),
+                    ("page DRAFT only", page_pdf("DRAFT"), 1),
+                    ("page reversed DRAFT", page_pdf("החילשל אל — הטויט · TFARD"), 1),
                     ("Info only", page_pdf("", metadata="Info"), 1),
                     ("XMP only", page_pdf("", metadata="XMP"), 1),
                     ("unused stream only", page_pdf("", metadata="unused stream"), 1),
@@ -708,6 +716,37 @@ class LintTests(unittest.TestCase):
                                      cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(process.returncode, 0, process.stderr)
             (root / "report.pdf").write_bytes((output / "report.pdf").read_bytes())
+            self.assertEqual(self.cli(root).returncode, 1)
+            self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"missing-draft-marker"})
+
+    def test_rendered_english_shadow_pdf_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.write(root, "report.md", GOOD)
+            output = root / "rendered"
+
+            def render(*args):
+                process = subprocess.run([sys.executable, "-m", "arf.render", str(root / "report.md"),
+                                          "--lang", "en", "--out", str(output), *args],
+                                         cwd=ROOT, capture_output=True, text=True, check=False)
+                self.assertEqual(process.returncode, 0, process.stderr)
+                pdf = (output / "report.pdf").read_bytes()
+                (root / "report.pdf").write_bytes(pdf)
+                return pdf
+
+            pdf = render()
+            pages = list(Document(pdf).pages())
+            self.assertGreater(len(pages), 0)
+            for page in pages:
+                lines = {" ".join(line.split()) for line in page.splitlines()}
+                self.assertIn(LTR_VISUAL, lines)
+                self.assertNotIn(RTL_VISUAL, lines)
+            self.assertTrue(has_draft_marker(pdf))
+            for phase in ("shadow", "reviewed"):
+                process = self.cli(root, "--phase", phase)
+                self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+            render("--final")
+            self.assertFalse(has_draft_marker((root / "report.pdf").read_bytes()))
             self.assertEqual(self.cli(root).returncode, 1)
             self.assertEqual({f["rule"] for f in lint(root)["findings"]}, {"missing-draft-marker"})
 
