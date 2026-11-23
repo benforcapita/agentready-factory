@@ -871,7 +871,7 @@ class RenderThenLintTests(unittest.TestCase):
     def test_html_view_hidden_boundaries_follow_browser_parsing(self):
         def main_text(body):
             text = html_text(f"<html><body><h2>3. Context</h2><p>{body}</p></body></html>")
-            return "\n".join(line for line in text.splitlines() if not line.startswith("\x1e"))
+            return "\n".join(line for line in text.split("\n") if not line.startswith("\x1e"))
         lead = "Ben is a team leader"
         for body in (f"<span hidden/>{lead}</span>Info.",
                      f'<span style="display:none" style="color:red">{lead}</span>Info.',
