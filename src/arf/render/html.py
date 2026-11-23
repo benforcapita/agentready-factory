@@ -97,6 +97,19 @@ def _wrap_latin_runs(escaped: str) -> str:
     return marked.replace("\0", '<span dir="ltr" class="en">').replace("\1", "</span>")
 
 
+def _wrap_latin_text(body: str) -> str:
+    """Wrap the Latin runs of every text node, leaving <style> and <script> contents as written."""
+    parts, raw = [], False
+    for part in _TAG.split(body):
+        if part.startswith("<"):
+            if tag := re.match(r"<(/?)(?:style|script)\b", part, re.I):
+                raw = not tag[1]
+            parts.append(part)
+        else:
+            parts.append(part if raw else _wrap_latin_runs(part))
+    return "".join(parts)
+
+
 def _first_heading(body: str) -> str:
     match = re.search(r"<h1>(.*?)</h1>", body, flags=re.S)
     if not match:
@@ -136,7 +149,7 @@ def render_html(
         comment = draft_comment(run_id) + "\n"
     body = markdown.markdown(source, extensions=["tables", "nl2br"])
     if language.wrap_latin:
-        body = "".join(part if part.startswith("<") else _wrap_latin_runs(part) for part in _TAG.split(body))
+        body = _wrap_latin_text(body)
     body = body.replace("<table>", f'<table dir="{language.direction}">')
     body = re.sub(
         r"(<h2>" + re.escape(language.summary_heading) + r".*?)(<hr />)",

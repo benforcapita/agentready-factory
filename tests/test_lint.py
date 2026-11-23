@@ -868,6 +868,63 @@ class RenderThenLintTests(unittest.TestCase):
         found = sorted(rule for rule, _, _ in inspect_view(html_text(page)))
         self.assertEqual(found, ["ben-role", "price-in-offer"])
 
+    def test_html_view_hidden_boundaries_follow_browser_parsing(self):
+        def view(body):
+            return html_text(f"<html><head><style>.en{{direction:ltr}}@media print{{.p{{display:none}}}}</style>"
+                             f"</head><body><h2>3. Context</h2><p>{body}</p></body></html>")
+        lead = "Ben is a team leader"
+        for body in (f"<span hidden/>{lead}</span>Info.",
+                     f'<span style="display:none" style="color:red">{lead}</span>Info.',
+                     f'<span style="display:/**/none">{lead}</span>Info.',
+                     f'<span style="DISPLAY: /* x */ none /* y">{lead}</span>Info.',
+                     f"<template>{lead}</template>Info.",
+                     f"<noscript><br>{lead}</noscript>Info.",
+                     f'<span style="visibility:hidden">{lead}</span>Info.',
+                     f'<span style="visibility:collapse"><br>{lead}</span>Info.',
+                     f'<span style="font-size:0"><br>{lead}</span>Info.',
+                     f'<span style="font-size:0.0px">{lead}</span>Info.',
+                     f'<span style="opacity:0">{lead}</span>Info.',
+                     f'<span style="color:transparent">{lead}</span>Info.',
+                     f'<style>.h{{display:none}}</style><span class="h">{lead}</span>Info.',
+                     f'<style>@media screen{{body p span#k.h{{opacity:0}}}}</style><span id="k" class="h x">{lead}</span>Info.',
+                     f'<style>.srOnly{{display:none}}</style><span class="srOnly">{lead}</span>Info.',
+                     f'<style>P > #hideMe{{font-size:0}}</style><span id="hideMe">{lead}</span>Info.',
+                     f'<style>@layer x{{.Hide{{color:transparent}}}}</style><span class="Hide">{lead}</span>Info.',
+                     f'<span style="content-visibility:hidden">{lead}</span>Info.',
+                     f"מידע<span hidden>{lead}</span>מידע",
+                     f'<span style="font-size:0">Ben is a team lea</span><span style="font-size:0">der</span>Info.',
+                     f'<span hidden>Ben is a <span hidden>team</span> leader</span>Info.'):
+            with self.subTest(body=body):
+                self.assertIn(f"\n{lead}\n", view(body))
+        for body in (f'<span style="color:red" style="display:none">{lead}</span>Info.',
+                     f'<span style="opacity:0.5">{lead}</span>Info.',
+                     f'<span style="background-color:transparent;font-size:0.9em">{lead}</span>Info.',
+                     f'<span class="p">{lead}</span>Info.',
+                     f'<style>.h:hover{{display:none}} .k{{display:none}}</style><span class="h">{lead}</span>Info.',
+                     f'<style>div.h, #k, .h.k{{display:none}}</style><span id="j" class="h">{lead}</span>Info.',
+                     f'<style>.srOnly{{display:none}} #hideme{{display:none}}</style><span id="hideMe" class="sronly">{lead}</span>Info.',
+                     f'<style>.a .b, div > .b, p + .b{{display:none}}</style><span class="b">{lead}</span>Info.',
+                     f'<style>@media (max-width:1px){{.b{{display:none}}}} @media screen and (min-width:2000px){{.b{{display:none}}}}</style>'
+                     f'<span class="b">{lead}</span>Info.',
+                     f'<span style="background:linear-gradient(red,blue);-webkit-background-clip:text;color:transparent">{lead}</span>Info.',
+                     f'<span style="content-visibility:auto">{lead}</span>Info.',
+                     f"<style/>{lead}Info.",
+                     f"<b>{lead}</b>Info."):
+            with self.subTest(body=body):
+                self.assertIn(f"{lead}Info.", view(body))
+                self.assertEqual(inspect_view(view(body)), [])
+
+    def test_html_view_adds_no_findings_on_ordinary_text(self):
+        probes = ("תכננו מראש <strong>צוות</strong> קטן.", "<b>מראש</b> צוות קטן.",
+                  "הזמינו <strong>מראש</strong> את ה<b>צוות</b> שלנו.", "ראש <em>הצוות</em>")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for probe in probes:
+                with self.subTest(probe=probe):
+                    (root / "report.md").write_text(GOOD.replace("Content.", probe), encoding="utf-8")
+                    _, result = self.run_lint(root)
+                    self.assertEqual([f for f in result["findings"] if f["file"].startswith("rendered:")], [], result)
+
     def test_rendered_views_of_clean_drafts_pass(self):
         for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):
             with self.subTest(draft=name):
