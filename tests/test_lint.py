@@ -886,7 +886,11 @@ class RenderThenLintTests(unittest.TestCase):
                      f'<span style="opacity:0">{lead}</span>Info.',
                      f'<span style="color:transparent">{lead}</span>Info.',
                      f'<style>.h{{display:none}}</style><span class="h">{lead}</span>Info.',
-                     f'<style>@media screen{{div span#k.h{{opacity:0}}}}</style><span id="k" class="h x">{lead}</span>Info.',
+                     f'<style>@media screen{{body p span#k.h{{opacity:0}}}}</style><span id="k" class="h x">{lead}</span>Info.',
+                     f'<style>.srOnly{{display:none}}</style><span class="srOnly">{lead}</span>Info.',
+                     f'<style>P > #hideMe{{font-size:0}}</style><span id="hideMe">{lead}</span>Info.',
+                     f'<style>@layer x{{.Hide{{color:transparent}}}}</style><span class="Hide">{lead}</span>Info.',
+                     f'<span style="content-visibility:hidden">{lead}</span>Info.',
                      f"מידע<span hidden>{lead}</span>מידע",
                      f'<span style="font-size:0">Ben is a team lea</span><span style="font-size:0">der</span>Info.',
                      f'<span hidden>Ben is a <span hidden>team</span> leader</span>Info.'):
@@ -898,6 +902,13 @@ class RenderThenLintTests(unittest.TestCase):
                      f'<span class="p">{lead}</span>Info.',
                      f'<style>.h:hover{{display:none}} .k{{display:none}}</style><span class="h">{lead}</span>Info.',
                      f'<style>div.h, #k, .h.k{{display:none}}</style><span id="j" class="h">{lead}</span>Info.',
+                     f'<style>.srOnly{{display:none}} #hideme{{display:none}}</style><span id="hideMe" class="sronly">{lead}</span>Info.',
+                     f'<style>.a .b, div > .b, p + .b{{display:none}}</style><span class="b">{lead}</span>Info.',
+                     f'<style>@media (max-width:1px){{.b{{display:none}}}} @media screen and (min-width:2000px){{.b{{display:none}}}}</style>'
+                     f'<span class="b">{lead}</span>Info.',
+                     f'<span style="background:linear-gradient(red,blue);-webkit-background-clip:text;color:transparent">{lead}</span>Info.',
+                     f'<span style="content-visibility:auto">{lead}</span>Info.',
+                     f"<style/>{lead}Info.",
                      f"<b>{lead}</b>Info."):
             with self.subTest(body=body):
                 self.assertIn(f"{lead}Info.", view(body))
