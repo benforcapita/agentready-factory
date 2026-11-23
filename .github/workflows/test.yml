@@ -72,7 +72,7 @@ jobs:
           grep -q "Needs review; run run-0001 succeeded; artifacts 8; command center 1" "$RUNNER_TEMP/publish.txt"
           grep -qF "Nothing sent; nobody contacted." "$RUNNER_TEMP/arf-publish/run-0001/result-comment.md"
           python -m arf.publish dry-run fixtures/requests/sample.yaml --out "$RUNNER_TEMP/arf-publish-eval" --eval | grep -q "command center 0"
-          if grep -rniE "permission|shar(e|ing)|anyone|domain.?wide|transfer|owner|notify|send|mail" src/arf/publish; then
+          if grep -rniE "permission|shar(e|ing)|anyone|domain.?wide|role|transfer|owner|notify|send|mail|post\(" src/arf/publish; then
             echo "sharing/permission/send API in publish code"; exit 1
           fi
       - name: Upload replay artifacts

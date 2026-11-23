@@ -229,7 +229,7 @@ class Publisher:
         if not publication.artifacts:
             raise PublishError(f"{run.id} produced no artifacts")
         self.store.link_run_artifacts(run.id, [artifact.id for artifact in publication.artifacts])
-        if context.request.mode != "eval":
+        if run.mode != "eval":
             publication.review_url = self.store.create_review_row(
                 Name=f"AgentReady draft review: {task.domain}",
                 Type="AgentReady report review",

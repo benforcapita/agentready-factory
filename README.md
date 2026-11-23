@@ -193,7 +193,7 @@ python -m arf.publish dry-run fixtures/requests/sample.yaml --out /tmp/arf-publi
 - Records one Artifacts row per file (Kind, Audience, Drive link, Box path, SHA-256,
   size, draft marker) and links them on the Run.
 - Creates a Command Center review row and sets the Task's `Command Center item`,
-  except in `eval` mode.
+  except when the Run's mode is `eval` (a forced retry keeps the Task's mode).
 - A publish error ends the Run `failed` and the Task `Failed`.
 - `result_comment` returns the result comment text and ends with
   "Nothing sent; nobody contacted." The dry run writes it to `result-comment.md`;

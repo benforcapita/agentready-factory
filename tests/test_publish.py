@@ -50,7 +50,7 @@ class FileSteps:
 
     def __init__(self, out, passed=True):
         self.out = Path(out)
-        self.passed = passed
+        self.results = list(passed) if isinstance(passed, (list, tuple)) else [passed]
 
     def directory(self, context):
         return self.out / context.run.id
@@ -68,9 +68,9 @@ class FileSteps:
         (directory / "notes-for-ben.md").write_text("notes\n", encoding="utf-8")
 
     def check(self, context):
-        hard = 0 if self.passed else 1
-        findings = [] if self.passed else [dict(rule="price-in-offer", level="hard_fail", acknowledged=False)]
-        return dict(passed=self.passed, findings=findings, summary=dict(hard_fail=hard, warning=0))
+        passed = self.results.pop(0) if len(self.results) > 1 else self.results[0]
+        findings = [] if passed else [dict(rule="price-in-offer", level="hard_fail", acknowledged=False)]
+        return dict(passed=passed, findings=findings, summary=dict(hard_fail=0 if passed else 1, warning=0))
 
 
 class BrokenDrive(MemoryDrive):
@@ -79,13 +79,66 @@ class BrokenDrive(MemoryDrive):
 
 
 class PublishTests(unittest.TestCase):
-    def run_pipeline(self, out, *, mode="shadow", passed=True, drive=None):
+    def pipeline(self, out, *, passed=True, drive=None, now=NOW):
         store, drive = PublishStore(), drive or MemoryDrive()
         steps = FileSteps(out, passed)
         publisher = Publisher(store, drive)
-        orchestrator = Orchestrator(store, PublishingSteps(steps, publisher, steps.directory), clock=lambda: NOW)
+        orchestrator = Orchestrator(store, PublishingSteps(steps, publisher, steps.directory), clock=lambda: now)
+        return store, drive, publisher, orchestrator
+
+    def run_pipeline(self, out, *, mode="shadow", passed=True, drive=None, now=NOW):
+        store, drive, publisher, orchestrator = self.pipeline(out, passed=passed, drive=drive, now=now)
         task = orchestrator.execute(orchestrator.submit(request(mode=mode)).task.id)
         return store, drive, publisher, task, store.runs[task.latest_run]
+
+    def forced_retry(self, out, first_mode, retry_mode):
+        # The draft loop runs 3 checks before Guardrail blocked; the forced retry's check passes.
+        store, drive, publisher, orchestrator = self.pipeline(out, passed=[False, False, False, True])
+        blocked = orchestrator.execute(orchestrator.submit(request(mode=first_mode)).task.id)
+        self.assertEqual(blocked.status, "Guardrail blocked")
+        retry = orchestrator.submit(request(mode=retry_mode, force=True))
+        self.assertTrue(retry.retried)
+        task = orchestrator.execute(retry.task.id)
+        return store, publisher, task, store.runs[task.latest_run]
+
+    def test_forced_retry_uses_run_mode_not_request_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, publisher, task, run = self.forced_retry(Path(tmp) / "a", "shadow", "eval")
+            self.assertEqual((task.status, run.mode, run.retry_of), ("Needs review", "shadow", "run-0001"))
+            (row,) = store.command_center.values()
+            self.assertEqual(row["Run"], run.id)
+            self.assertEqual(store.task_links[task.id]["Command Center item"], row["url"])
+            store, publisher, task, run = self.forced_retry(Path(tmp) / "b", "eval", "shadow")
+            self.assertEqual((task.status, run.mode), ("Needs review", "eval"))
+            self.assertEqual((store.command_center, store.task_links), ({}, {}))
+            comment = result_comment(task, run, publisher.publications[run.id])
+            self.assertIn("mode eval", comment)
+            self.assertIn("eval run, no Command Center item", comment)
+
+    def test_folder_date_is_israel_date(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            late = datetime(2026, 11, 22, 23, 30, tzinfo=timezone.utc)
+            store, drive, publisher, task, run = self.run_pipeline(tmp, now=late)
+        self.assertEqual(drive.calls[2][1]["name"], f"2026-11-23 example.com {run.id}")
+
+    def test_files_without_marker_record_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "report.md").write_text("# final\n", encoding="utf-8")
+            (directory / "report.html").write_text("<p>final</p>", encoding="utf-8")
+            (directory / "report.pdf").write_bytes(b"%PDF-1.7")
+            for name in ("report.md", "report.html", "report.pdf"):
+                self.assertFalse(publish.draft_marker_present(directory / name), name)
+            (directory / "report.html").write_text(draft_comment("run-0001") + "<p>draft</p>", encoding="utf-8")
+            self.assertTrue(publish.draft_marker_present(directory / "report.pdf"))
+
+    def test_finished_run_rejects_artifact_link(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, drive, publisher, task, run = self.run_pipeline(tmp)
+        self.assertEqual(run.status, "succeeded")
+        with self.assertRaises(publish.PublishError):
+            store.link_run_artifacts(run.id, ["artifact-0001"])
+        self.assertEqual(store.run_artifacts[run.id], tuple(store.artifacts))
 
     def test_passing_run_uploads_privately_and_records_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +162,8 @@ class PublishTests(unittest.TestCase):
                 self.assertEqual(set(artifact.properties()), {p.name for p in ARTIFACTS.properties})
             self.assertTrue(kinds["report_md"].draft_marker_present)
             self.assertTrue(kinds["report_html"].draft_marker_present)
+            self.assertFalse(kinds["notes_for_ben"].draft_marker_present)
+            self.assertFalse(kinds["manifest"].draft_marker_present)
             self.assertEqual((kinds["report_md"].audience, kinds["notes_for_ben"].audience), ("client_draft", "private"))
             self.assertEqual(store.run_artifacts[run.id], tuple(store.artifacts))
             for record in drive.files.values():
