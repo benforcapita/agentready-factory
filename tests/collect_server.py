@@ -70,11 +70,15 @@ def server():
             self.server.headers_seen.append(dict(self.headers))
             body = b"fixture body\n"
             redirect = self.server.redirect if self.path == "/llms-full.txt" else None
-            if self.path == "/":
-                redirect = "/never-follow-probe"
+            redirect = self.server.redirects.get((host, self.path), redirect)
+            page = self.server.pages.get((host, self.path))
+            if page:
+                body = page
             self.send_response(301 if redirect else 200)
             if redirect:
                 self.send_header("Location", redirect)
+            if page and self.server.content_language:
+                self.send_header("Content-Language", self.server.content_language)
             self.send_header("CF-Ray", "fixture-ray")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -97,6 +101,9 @@ def server():
     instance.paths = []
     instance.headers_seen = []
     instance.redirect = None
+    instance.redirects = {}
+    instance.pages = {}
+    instance.content_language = None
     instance.trickle = 0
     thread = Thread(target=instance.serve_forever, daemon=True)
     thread.start()
