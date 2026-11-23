@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from arf.prompts import RecordedPromptVersions
-from arf.scaffold import ScaffoldError, render, scaffold, slots
+from arf.scaffold import ScaffoldError, choose_language, render, resolve_language, scaffold, slots
 from arf.scaffold.__main__ import load_request, main
 from arf.scaffold.templates import NOTES, REPORT
 
@@ -27,7 +27,8 @@ NOTES_SLOTS = ["check-date", "talking-points", "questions", "caveats"]
 
 
 def request(language="he"):
-    return load_request(FIXTURES / f"request-{language}.yaml")
+    # request-he.yaml asks for `auto` on example.com, which now detects en; pin the Hebrew fixture to he.
+    return load_request(FIXTURES / f"request-{language}.yaml").model_copy(update={"language": language})
 
 
 def h2(text):
@@ -117,6 +118,85 @@ class ScaffoldTest(unittest.TestCase):
             with self.assertRaisesRegex(ScaffoldError, "not empty"):
                 scaffold(request(), Path(directory), RUN_ID, RecordedPromptVersions(PROMPTS / "recorded"))
             self.assertEqual((Path(directory) / "report.md").read_text(), "keep")
+
+
+class AutoLanguageTest(unittest.TestCase):
+    def auto(self, site):
+        return request("en").model_copy(update={"language": "auto", "site": site})
+
+    def evidence(self, directory, html=None, site=None):
+        root = Path(directory) / "evidence"
+        if html is not None:
+            (root / "readers").mkdir(parents=True)
+            (root / "readers" / "jina_home.html").write_text(html, encoding="utf-8")
+        if site is not None:
+            (root / "collect").mkdir(parents=True)
+            (root / "collect" / "site.json").write_text(json.dumps(site), encoding="utf-8")
+        return root
+
+    def test_explicit_language_overrides_detected(self):
+        with TemporaryDirectory() as directory:
+            root = self.evidence(directory, '<html lang="en-US">')
+            he = request().model_copy(update={"site": "https://www.haaretz.co.il"})
+            self.assertEqual(resolve_language(he, None, root), "he")
+            self.assertEqual(resolve_language(self.auto("https://www.haaretz.co.il"), "he", root), "he")
+            self.assertEqual(choose_language(self.auto("https://www.haaretz.co.il"), "he", root).reason, "--lang")
+            self.assertEqual(resolve_language(self.auto("https://www.haaretz.co.il"), None, root), "en")
+
+    def test_auto_reads_readers_home_page(self):
+        with TemporaryDirectory() as directory:
+            root = self.evidence(directory, '<html lang="en-US"><head></head></html>')
+            choice = choose_language(self.auto("https://www.timesofisrael.com"), None, root)
+            self.assertEqual((choice.language, choice.reason, choice.evidence), ("en", "html lang=en-US", "readers/jina_home.html"))
+
+    def test_auto_reads_bundle_home_page(self):
+        choice = choose_language(self.auto("https://www.lehamim.co.il/"), None, GOLDEN)
+        self.assertEqual((choice.language, choice.reason, choice.evidence), ("he", "html lang=he-IL", "jina_home.html"))
+
+    def test_site_json_is_preferred_and_optional(self):
+        with TemporaryDirectory() as directory:
+            root = self.evidence(directory, '<html lang="he-IL">', {
+                "canonical_url": "https://www.elal.com/en/", "html_lang": "en", "content_language": None, "final_status": 200,
+            })
+            choice = choose_language(self.auto("https://www.elal.co.il"), None, root)
+            self.assertEqual((choice.language, choice.reason, choice.evidence), ("en", "html lang=en", "collect/site.json"))
+            (root / "collect" / "site.json").write_text("{not json", encoding="utf-8")
+            self.assertEqual(choose_language(self.auto("https://www.elal.co.il"), None, root).evidence, "readers/jina_home.html")
+        with TemporaryDirectory() as directory:
+            root = self.evidence(directory, site={"canonical_url": "https://www.elal.co.il/he", "html_lang": None})
+            self.assertEqual(choose_language(self.auto("https://elal.com"), None, root).reason, "host www.elal.co.il (.il)")
+
+    def test_auto_without_evidence_uses_host(self):
+        self.assertEqual(choose_language(self.auto("https://www.lehamim.co.il")).language, "he")
+        self.assertEqual(choose_language(self.auto("https://example.com"), None, Path("/nonexistent")).language, "en")
+
+    def test_auto_run_records_reason_in_notes_and_metadata(self):
+        cases = (
+            ("https://www.timesofisrael.com", '<html lang="en-US">', "en", "html lang=en-US", "Language: en — html lang=en-US"),
+            ("https://www.lehamim.co.il/", None, "he", "html lang=he-IL", "Language: he — html lang=he-IL"),
+            ("https://www.9tv.co.il", '<html lang="ru-RU">', "en", "unsupported:ru",
+             "Language: en — unsupported:ru (declared ru-RU; flagged for Ben)"),
+        )
+        for site, html, language, reason, line in cases:
+            with self.subTest(site), TemporaryDirectory() as directory:
+                root = GOLDEN if html is None else self.evidence(directory, html)
+                out = Path(directory) / "run"
+                result = scaffold(self.auto(site), out, RUN_ID, RecordedPromptVersions(PROMPTS / "recorded"), evidence_dir=root)
+                self.assertEqual(result.language, language)
+                notes = (out / "notes-for-ben.md").read_text(encoding="utf-8")
+                self.assertIn(f"\n{line}\n", notes)
+                self.assertEqual(notes, NOTES[language].format(
+                    contact_name="Example Contact", business="Example Bakery", meeting_line=f"{line}\n\n"))
+                metadata = json.loads((out / "language.json").read_text(encoding="utf-8"))
+                self.assertEqual((metadata["run_id"], metadata["requested"], metadata["language"], metadata["reason"]),
+                                 (RUN_ID, "auto", language, reason))
+
+    def test_explicit_run_writes_no_language_note(self):
+        with TemporaryDirectory() as directory:
+            out = Path(directory) / "run"
+            scaffold(request("en"), out, RUN_ID, RecordedPromptVersions(PROMPTS / "recorded"), evidence_dir=GOLDEN)
+            self.assertFalse((out / "language.json").exists())
+            self.assertNotIn("Language:", (out / "notes-for-ben.md").read_text(encoding="utf-8"))
 
 
 class CommandTest(unittest.TestCase):
