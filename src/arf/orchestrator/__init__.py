@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+import json
 from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from ..notion.schemas import RUNS, TASK_STATUSES, TASKS
+from .eval import EvalMode, EvalResult
 
 ISRAEL = ZoneInfo("Asia/Jerusalem")
 MAX_FIX_ATTEMPTS = 2
@@ -135,6 +137,7 @@ class Run:
     lint_warnings: int | None = None
     fix_attempts: int = 0
     error: str | None = None
+    eval_run: str | None = None
 
     @property
     def is_finished(self) -> bool:
@@ -154,6 +157,7 @@ class Run:
             "Lint warnings": self.lint_warnings,
             "Error": self.error,
             "Retry of": [self.retry_of] if self.retry_of else [],
+            "Eval run": self.eval_run,
         }
 
 
@@ -257,11 +261,13 @@ class Orchestrator:
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         max_fix_attempts: int = MAX_FIX_ATTEMPTS,
+        eval_mode: EvalMode | None = None,
     ) -> None:
         self.store = store
         self.steps = steps
         self.clock = clock
         self.max_fix_attempts = max_fix_attempts
+        self.eval_mode = eval_mode
         self._requests: dict[str, Any] = {}
 
     def submit(self, request: Any) -> Submission:
@@ -277,6 +283,19 @@ class Orchestrator:
         - Cancelled, Rejected request or none: a fresh Task and Run.
         """
         key = idempotency_key(request, self.clock())
+        eval_run = None
+        if request.mode == "eval":
+            if request.allow_public_scan:
+                raise ValueError("public scans are not allowed in eval mode")
+            case = getattr(request, "eval_case", None)
+            bundle = getattr(request, "fixture_bundle", None)
+            # T8b's publish-only smoke test sets the mode without eval fields.
+            # Unlike that synthetic request, a validated eval needs the harness.
+            if case is not None or bundle is not None or self.eval_mode is not None:
+                if not case or not bundle or self.eval_mode is None or not self.eval_mode.run_url:
+                    raise ValueError("eval mode requires an eval case, fixture bundle and Eval Run")
+                eval_run = self.eval_mode.run_url
+                key = "eval:" + json.dumps([key, eval_run, str(case)])
         existing = self.store.find_task(key)
         if existing is not None and existing.status in RETRYABLE_TASK_STATUSES:
             if request.force:
@@ -288,7 +307,7 @@ class Orchestrator:
             self._record_duplicate(request, key, existing)
             return Submission(existing, self.store.runs[existing.latest_run], reused=True)
         task = self.store.create_task(status="Requested", **self._task_values(request, key))
-        run = self.store.create_run(task=task.id, status="queued", mode=request.mode)
+        run = self.store.create_run(task=task.id, status="queued", mode=request.mode, eval_run=eval_run)
         task = self.store.update_task(task.id, runs=(run.id,), latest_run=run.id)
         self._requests[task.id] = request
         return Submission(task, run)
@@ -305,8 +324,9 @@ class Orchestrator:
         task = self.store.tasks[task_id]
         if task.status not in RETRYABLE_TASK_STATUSES:
             raise IllegalTransition(f"{task_id} is {task.status!r}; only Failed or Guardrail blocked Tasks retry")
+        previous = self.store.runs[task.latest_run]
         run = self.store.create_run(
-            task=task_id, status="queued", mode=task.mode, retry_of=task.latest_run,
+            task=task_id, status="queued", mode=task.mode, retry_of=previous.id, eval_run=previous.eval_run,
         )
         task = self.store.update_task(
             task_id, status="Claimed", runs=(*task.runs, run.id), latest_run=run.id,
@@ -330,39 +350,60 @@ class Orchestrator:
         run = self.store.runs[task.latest_run]
         if run.status != "queued":
             raise IllegalTransition(f"{run.id} is {run.status!r}; only queued Runs execute")
+        steps = self.steps
+        if run.eval_run is not None:
+            if self.eval_mode is None or self.eval_mode.run_url != run.eval_run:
+                raise ValueError("eval mode must execute with the linked Eval Run")
+            steps = self.eval_mode.steps
         context = RunContext(self._requests[task_id], task, run)
         if task.status != "Claimed":
             self._task(context, "Claimed")
         self._run(context, status="running", started=self.clock())
         try:
             self._task(context, "Collecting evidence")
-            self.steps.collect(context)
+            steps.collect(context)
             fix = None
             while True:
                 self._task(context, "Drafting")
-                self.steps.draft(context, fix)
+                steps.draft(context, fix)
                 self._task(context, "Rendering")
-                self.steps.render(context)
+                steps.render(context)
                 self._task(context, "Checking")
-                result = self.steps.check(context)
+                result = steps.check(context)
                 summary = result["summary"]
                 self._run(context, lint_hard_fails=summary["hard_fail"],
                           lint_warnings=summary["warning"], fix_attempts=context.attempt)
                 if result["passed"]:
-                    self._run(context, status="succeeded", finished=self.clock())
-                    return self._task(context, "Needs review")
+                    return self._finish(context, "succeeded", "Needs review")
                 fix = [f for f in result["findings"] if f["level"] == "hard_fail" or not f["acknowledged"]]
                 if context.attempt >= self.max_fix_attempts:
                     rules = ", ".join(sorted({f["rule"] for f in fix}))
-                    self._run(context, status="guardrail_blocked", finished=self.clock(),
-                              error=f"lint failed after {context.attempt} fix attempts: {rules}")
-                    return self._task(context, "Guardrail blocked")
+                    return self._finish(context, "guardrail_blocked", "Guardrail blocked",
+                                        error=f"lint failed after {context.attempt} fix attempts: {rules}")
                 context.attempt += 1
         except Exception as error:
             if self.store.runs[context.run.id].is_finished:
                 raise
-            self._run(context, status="failed", finished=self.clock(), error=f"{type(error).__name__}: {error}")
-            return self._task(context, "Failed")
+            return self._finish(context, "failed", "Failed", error=f"{type(error).__name__}: {error}")
+
+    def _finish(self, context: RunContext, status: str, task_status: str, error: str | None = None) -> Task:
+        run = context.run
+        if run.eval_run is not None:
+            try:
+                self.eval_mode.record_result(EvalResult(
+                    factory_run_id=run.id,
+                    eval_run=run.eval_run,
+                    eval_case=str(context.request.eval_case),
+                    status=status,
+                    lint_hard_fails=run.lint_hard_fails,
+                    lint_warnings=run.lint_warnings,
+                    fix_attempts=run.fix_attempts,
+                ))
+            except Exception as write_error:
+                status, task_status = "failed", "Failed"
+                error = f"eval result write failed: {type(write_error).__name__}"
+        self._run(context, status=status, finished=self.clock(), error=error)
+        return self._task(context, task_status)
 
     def _task(self, context: RunContext, status: str) -> Task:
         context.task = self.store.update_task(context.task.id, status=status)
