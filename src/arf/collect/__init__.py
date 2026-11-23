@@ -15,7 +15,7 @@ from time import monotonic
 from urllib.parse import urljoin, urlunsplit
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import advertised, config
 from .doh import resolve_doh
 from .transport import BudgetExhausted, GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
 from ..language import html_lang
@@ -149,6 +149,7 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
     canonical_parts, canonical_host = target(canonical, policy)
     canonical_origin = f"{canonical_parts.scheme}://{canonical_parts.netloc}"
 
+    probe_bodies = {}
     with (out / "probes.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(("domain", "path", "agent", "status", "server", "cf_ray", "size"))
@@ -156,12 +157,15 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
             for path in config.PATHS:
                 for agent, ua in config.IDENTITIES:
                     status, server, ray, body, *_ = request(initial_url(name, path), ua)
+                    if agent == "browser" and status == 200:
+                        probe_bodies[(name, path)] = body
                     writer.writerow((name, path, agent, status, server, ray, len(body)))
         if (canonical_parts.path or "/") != "/":
             for agent, ua in config.IDENTITIES:
                 status, server, ray, body, *_ = request(canonical, ua)
                 writer.writerow((canonical_host, "landing", agent, status, server, ray, len(body)))
 
+    discovery_bodies = {}
     (out / "discovery").mkdir()
     with (out / "discovery.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream, lineterminator="\n")
@@ -179,6 +183,8 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
                         break
                     filename = f"discovery/{host_index}-{path_index}-{hop}.body"
                     (out / filename).write_bytes(body)
+                    if status == 200:
+                        discovery_bodies[path] = body
                     writer.writerow((name, path, url, status, len(body), filename))
                     if status not in (301, 302, 303, 307, 308) or not location:
                         break
@@ -192,6 +198,12 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
                                        "status": "error", "reason": f"invalid redirect: {error}"})
                         writer.writerow((name, path, location, "error", 0, ""))
                         break
+
+    advertised_sources = dict(discovery_bodies)
+    llms_txt = probe_bodies.get((canonical_host, "/llms.txt"))
+    if llms_txt is not None:
+        advertised_sources["/llms.txt"] = llms_txt
+    advertised_result = advertised.fetch(out, request, errors, advertised_sources)
 
     (out / "errors.json").write_text(json.dumps(errors, indent=2) + "\n", encoding="utf-8")
     files = []
@@ -208,6 +220,7 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
         "request_count": {"total": sum(counts.values()), "per_host": dict(counts),
                           "requests_made": sum(counts.values()), "max_requests": max_requests},
         "fake_ip_policy": fake_ip_policy, "doh_answers": doh_answers, "landing": landing,
+        "advertised": advertised_result,
         "config": {"identities": dict(config.IDENTITIES), "paths": config.PATHS,
                    "discovery_paths": config.DISCOVERY_PATHS, "timeout": config.TIMEOUT,
                    "max_requests": max_requests, "fake_ip_policy": fake_ip_policy,
