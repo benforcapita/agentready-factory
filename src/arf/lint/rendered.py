@@ -22,13 +22,9 @@ VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "li
                  "source", "track", "wbr"}
 
 
-# Elements whose text the HTML view already splits into blocks, lines or cells.
-BLOCK_ELEMENTS = {"address", "article", "aside", "blockquote", "body", "caption", "dd", "details", "dialog",
-                  "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
-                  "h4", "h5", "h6", "header", "html", "li", "main", "nav", "ol", "p", "pre", "section",
-                  "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"}
-# Starts an inline element's own text in the HTML view; inspect_view lints it as a separate unit.
-UNIT = "\x1e"
+HIDING = re.compile(r"(?:^|[;{])(?:display:none|visibility:(?:hidden|collapse)|color:transparent"
+                    r"|(?:font-size|opacity):(?:0+(?:\.0*)?|\.0+)(?:[a-z]+|%)?(?=$|[;!}]))")
+HIDDEN_ELEMENTS = {"template", "noscript"}
 
 
 def first_attributes(attrs):
@@ -41,26 +37,55 @@ def first_attributes(attrs):
     return result
 
 
-def css_hidden(attrs):
-    style = first_attributes(attrs)
-    style = re.sub(r"/\*.*?(?:\*/|$)", " ", dict(style).get("style") or "", flags=re.S)
-    style = re.sub(r"\s+", "", style.lower())
-    return any(name == "hidden" for name, _ in attrs) or bool(
-        re.search(r"display:none|visibility:(?:hidden|collapse)", style))
+def declarations(css):
+    return re.sub(r"\s+", "", re.sub(r"/\*.*?(?:\*/|$)", " ", css, flags=re.S).lower())
+
+
+def hiding_selectors(css):
+    """(tag, classes, id) subjects of <style> rules that hide text on screen (not only in print)."""
+    subjects, stack, buffer = [], [], ""
+    for char in re.sub(r"/\*.*?(?:\*/|$)", " ", css, flags=re.S):
+        if char == "{":
+            stack.append(buffer.strip().lower())
+            buffer = ""
+        elif char == "}" and stack:
+            prelude = stack.pop()
+            print_only = any(re.match(r"@media\b(?!.*\b(?:screen|all)\b).*\bprint\b", outer)
+                             for outer in stack)
+            if not prelude.startswith("@") and not print_only and HIDING.search(declarations(buffer)):
+                for selector in prelude.split(","):
+                    subject = re.split(r"[\s>+~]+", selector.strip())[-1]
+                    if match := re.fullmatch(r"([a-z][a-z0-9-]*|\*)?((?:[.#][\w-]+)*)", subject):
+                        parts = re.findall(r"([.#])([\w-]+)", match[2])
+                        subjects.append((match[1] or "*", {name for kind, name in parts if kind == "."},
+                                         {name for kind, name in parts if kind == "#"}))
+            buffer = ""
+        else:
+            buffer += char
+    return subjects
+
+
+def css_hidden(attrs, tag="", selectors=()):
+    attrs = dict(first_attributes(attrs))
+    classes, ids = set((attrs.get("class") or "").split()), {attrs.get("id") or ""}
+    return "hidden" in attrs or tag in HIDDEN_ELEMENTS or bool(HIDING.search(declarations(attrs.get("style") or ""))) or any(
+        rule_tag in {"*", tag} and rule_classes <= classes and rule_ids <= ids
+        for rule_tag, rule_classes, rule_ids in selectors)
 
 
 class DeliveredHTML(HTMLDocument):
     """Every text node, comment and reader-visible attribute of the HTML body, incl. CSS-hidden subtrees.
 
-    Each inline element's own text is also emitted as its own unit, so text glued to a neighbour by
-    hiding this view does not recognize (class rules, font-size:0, noscript) still keeps its boundaries.
+    A hidden subtree is set off from the visible words around it, so text glued to it keeps its boundaries.
     """
 
     def __init__(self):
         super().__init__()
         self.attribute_text = []
-        self.unit_text = []
         self.open_elements = []
+        self.hiding_selectors = []
+        self.style_text = None
+        self.boundary = False
         self.head_state = "before"
 
     # Only the document's real <head> (before <body>) is non-text; browsers and WeasyPrint
@@ -81,45 +106,38 @@ class DeliveredHTML(HTMLDocument):
         return False
 
     def emit(self, text):
-        if (self.attribute_text or self.unit_text) and text.startswith("\n\n"):
+        # A boundary closing a hidden subtree is written lazily, so adjacent hidden subtrees join up.
+        if self.boundary:
+            self.boundary = False
+            self.emit("\n")
+        if self.attribute_text and text.startswith("\n\n"):
             pending, self.attribute_text = self.attribute_text, []
-            units, self.unit_text = self.unit_text, []
-            super().emit("".join("\n" + value for value in pending) + "".join("\n" + UNIT + value for value in units))
+            super().emit("".join("\n" + value for value in pending))
         super().emit(text)
 
-    def split_open_elements(self):
-        for element in self.open_elements:
-            element["inline"] = False
-
-    def close_element(self, element):
-        if element["hidden"]:
-            self.emit("\n")
-        elif element["inline"]:
-            text = re.sub(r"\s+", " ", "".join(element["text"])).strip()
-            if text:
-                self.unit_text.append(text)
+    def inside_hidden(self):
+        return any(element["hidden"] for element in self.open_elements)
 
     def handle_starttag(self, tag, attrs):
         if not self.real_head(tag, start=True):
             return
         attrs = first_attributes(attrs)
+        if tag == "style":
+            self.style_text = []
         super().handle_starttag(tag, attrs)
         if self.hidden:
             return
-        if tag in BLOCK_ELEMENTS:
-            self.split_open_elements()
         # Hidden subtrees are linted as their own unit: a boundary keeps them off the adjacent words.
-        hidden = tag == "template" or css_hidden(attrs)
+        hidden = css_hidden(attrs, tag, self.hiding_selectors) and not self.inside_hidden()
         if hidden:
-            self.emit("\n")
-        if tag not in VOID_ELEMENTS:
-            self.open_elements.append({"tag": tag, "hidden": hidden, "inline": tag not in BLOCK_ELEMENTS,
-                                       "text": []})
-        else:
-            if tag == "br":
-                self.split_open_elements()
-            if hidden:
+            if self.boundary:
+                self.boundary = False
+            else:
                 self.emit("\n")
+        if tag not in VOID_ELEMENTS:
+            self.open_elements.append({"tag": tag, "hidden": hidden})
+        elif hidden:
+            self.boundary = True
         names = READER_ATTRIBUTES + FORM_ATTRIBUTES.get(tag, ())
         for name, value in attrs:
             # Attribute text joins the end of its block, so the section and proposal logic still apply.
@@ -130,25 +148,28 @@ class DeliveredHTML(HTMLDocument):
     def handle_endtag(self, tag):
         if not self.real_head(tag, start=False):
             return
+        if tag == "style" and self.style_text is not None:
+            self.hiding_selectors += hiding_selectors("".join(self.style_text))
+            self.style_text = None
         if any(element["tag"] == tag for element in self.open_elements):
             while self.open_elements:
                 element = self.open_elements.pop()
-                self.close_element(element)
+                if element["hidden"]:
+                    self.boundary = True
                 if element["tag"] == tag:
                     break
-        if tag in BLOCK_ELEMENTS:
-            self.split_open_elements()
         super().handle_endtag(tag)
 
     # Browsers ignore "/>" on HTML elements: <span hidden/> stays open and hides the text after it.
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
+        if tag == "style":
+            self.handle_endtag(tag)
 
     def handle_data(self, data):
+        if self.style_text is not None:
+            self.style_text.append(data)
         super().handle_data(data)
-        if not self.hidden:
-            for element in self.open_elements:
-                element["text"].append(data)
 
     def handle_comment(self, data):
         if not self.hidden:
@@ -156,8 +177,6 @@ class DeliveredHTML(HTMLDocument):
 
     def close(self):
         super().close()
-        while self.open_elements:
-            self.close_element(self.open_elements.pop())
         self.emit("\n\n")
 
 
@@ -220,7 +239,6 @@ def render_views(markdown_source):
 
 def inspect_view(text):
     """(rule, line, excerpt) for RENDERED_RULES on one view, with the source lint's section logic."""
-    from .matching import Skeleton
     from .rules import MONEY, PRICING, ROLE, normalize_for_matching
 
     text = normalize_for_matching(text)
@@ -234,17 +252,10 @@ def inspect_view(text):
         proposal = bool(numbered and numbered[1] in {"4", "5"}) or (
             bool(re.search(r"תקציר[\s-]+מנהלים|Executive[\s-]+summary", section, re.I)) and
             bool(re.search(r"(?:ההצעה|proposal|our[\s-]+offer)\s*:", raw, re.I)))
-        main, *units = raw.split(UNIT)
-        seen = set()
-        for index, part in enumerate([main, *units]):
-            found = [("price-in-offer", match[0]) for match in PRICING.finditer(part, rendered=True)]
-            found += [("price-in-offer" if proposal else "currency-outside-offer", match[0])
-                      for match in MONEY.finditer(part, rendered=True)]
-            found += [("ben-role", match[0]) for match in ROLE.finditer(part, rendered=True)]
-            for rule, excerpt in found:
-                key = (rule, Skeleton(excerpt, rendered=True).text)
-                if index and key in seen:
-                    continue
-                seen.add(key)
-                findings.append((rule, line, excerpt))
+        for match in PRICING.finditer(raw, rendered=True):
+            findings.append(("price-in-offer", line, match[0]))
+        for match in MONEY.finditer(raw, rendered=True):
+            findings.append(("price-in-offer" if proposal else "currency-outside-offer", line, match[0]))
+        for match in ROLE.finditer(raw, rendered=True):
+            findings.append(("ben-role", line, match[0]))
     return findings
