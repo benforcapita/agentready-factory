@@ -45,6 +45,10 @@ IDEOGRAPHIC_DOTS = re.compile("[\u3002\uff0e\uff61]")
 SIXTOFOUR_NETWORK = IPv6Network("2002::/16")
 # Teredo relays traffic through a third-party server, so reject the whole prefix.
 TEREDO_NETWORK = IPv6Network("2001::/32")
+# IANA IETF Protocol Assignments. Python patch releases disagree on its anycast
+# and infrastructure sub-prefixes (2001:1::1, 2001:3::/32, 2001:4:112::/48,
+# 2001:20::/28, 2001:30::/28), and none of them hosts a website, so reject all of it.
+IETF_PROTOCOL_NETWORK = IPv6Network("2001::/23")
 NAT64_NETWORKS = (IPv6Network("64:ff9b::/96"), IPv6Network("64:ff9b:1::/48"))
 SIIT_NETWORK = IPv6Network("::ffff:0:0:0/96")
 SPECIAL_USE_SUFFIXES = ("localhost", "local", "internal", "home.arpa", "test", "invalid", "onion", "alt")
@@ -52,8 +56,11 @@ SPECIAL_USE_SUFFIXES = ("localhost", "local", "internal", "home.arpa", "test", "
 
 def is_public(address):
     if isinstance(address, IPv6Address):
-        # Python patch releases disagree on whether 6to4 is global.
-        if address in SIXTOFOUR_NETWORK or address in TEREDO_NETWORK:
+        # Python patch releases disagree on whether these prefixes are global.
+        if any(
+            address in network
+            for network in (SIXTOFOUR_NETWORK, TEREDO_NETWORK, IETF_PROTOCOL_NETWORK)
+        ):
             return False
         if not address.is_global or address.is_site_local or address.is_multicast:
             return False
