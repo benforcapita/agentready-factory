@@ -394,11 +394,18 @@ def decode_text(raw, mapping):
     return "".join(result)
 
 
+def marker_forms():
+    """DRAFT_MARKER in logical order and in the visual glyph order of an RTL and an LTR line."""
+    rtl = re.sub(r"[A-Za-z]+", lambda match: match[0][::-1], DRAFT_MARKER[::-1])
+    ltr = re.sub(r"[\u0590-\u05ff](?:[^A-Za-z\u0590-\u05ff]*[\u0590-\u05ff])*", lambda match: match[0][::-1], DRAFT_MARKER)
+    return {DRAFT_MARKER, rtl, ltr}
+
+
 def has_draft_marker(pdf):
-    visual = re.sub(r"[A-Za-z]+", lambda match: match[0][::-1], DRAFT_MARKER[::-1])
+    forms = marker_forms()
     try:
         pages = list(Document(pdf).pages())
-        return bool(pages) and all(any(" ".join(line.split()) in {DRAFT_MARKER, visual}
+        return bool(pages) and all(any(" ".join(line.split()) in forms
                                        for line in page.splitlines()) for page in pages)
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError, zlib.error):
         return False

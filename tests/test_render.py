@@ -9,6 +9,7 @@ import sys
 from tempfile import TemporaryDirectory
 import unittest
 
+from arf.lint.pdf import has_draft_marker
 from arf.render import DRAFT_MARKER, BlockedResource, draft_comment, render_html, render_pdf
 from arf.render.__main__ import main
 
@@ -212,6 +213,18 @@ class PdfTests(RenderCommand, unittest.TestCase):
         for page in pages:
             self.assertIn("טיוטה — לא לשליחה", page)
             self.assertIn("DRAFT", page)
+
+    def test_english_shadow_pdf_carries_a_detectable_draft_marker_on_every_page(self):
+        pdf = self.render_pdf_fixture(ENGLISH, "--lang", "en")
+        pages = [page for page in self.text(pdf).split("\f") if page.strip()]
+        self.assertGreaterEqual(len(pages), 1)
+        for page in pages:
+            self.assertIn("טיוטה — לא לשליחה", page)
+            self.assertIn("DRAFT", page)
+        self.assertTrue(has_draft_marker(pdf.read_bytes()))
+
+    def test_hebrew_shadow_pdf_draft_marker_is_detectable(self):
+        self.assertTrue(has_draft_marker(self.render_pdf_fixture(GOLDEN / "report.md", "--run-id", "run-7").read_bytes()))
 
     def test_english_pdf(self):
         pdf = self.render_pdf_fixture(ENGLISH, "--lang", "en")
