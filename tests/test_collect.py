@@ -16,6 +16,7 @@ from arf.cli import main
 from arf.collect import collect, config
 from arf.collect.doh import resolve_doh
 from arf.collect.transport import GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused
+from arf.language import detect_declared
 from arf.validation import InvalidRequest
 from tests.collect_server import closing_server, local_policy, resolve, server
 
@@ -327,6 +328,15 @@ class CollectTests(unittest.TestCase):
             data = (self.out / name).read_bytes()
             self.assertEqual(files[name]["bytes"], len(data))
             self.assertEqual(files[name]["sha256"], hashlib.sha256(data).hexdigest())
+
+    def test_landing_html_lang_ignores_data_lang(self):
+        self.instance.pages = {("www.shop.example", "/"): b'<html data-lang="en" lang="he-IL"><body></body></html>'}
+        self.instance.content_language = "he"
+        self.run_collect()
+        site = json.loads((self.out / "site.json").read_text())
+        self.assertEqual((site["html_lang"], site["content_language"]), ("he-IL", "he"))
+        self.assertEqual(detect_declared(site["html_lang"], site["content_language"], "shop.example")[:2],
+                         ("he", "html lang=he-IL"))
 
     def test_landing_redirect_to_private_destination_is_refused(self):
         for destination in ("http://private.example/", "http://127.0.0.1/"):

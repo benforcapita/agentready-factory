@@ -12,13 +12,13 @@ from pathlib import Path
 import socket
 from threading import Timer
 from time import monotonic
-import re
 from urllib.parse import urljoin, urlunsplit
 from zoneinfo import ZoneInfo
 
 from . import config
 from .doh import resolve_doh
 from .transport import BudgetExhausted, GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
+from ..language import html_lang
 from ..validation import ipv4_literal
 
 
@@ -141,9 +141,8 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
             break
     canonical = url if status == 200 else request_url
     (out / "landing.html").write_bytes(body)
-    match = re.search(rb"<html\b[^>]*?\blang\s*=\s*[\"']?([^\"'\s>]*)", body[:65536], re.IGNORECASE) if status == 200 else None
     site_info = {"canonical_url": canonical,
-                 "html_lang": match[1].decode("ascii", "replace") if match and match[1] else None,
+                 "html_lang": html_lang(body.decode("utf-8", "replace")) if status == 200 else None,
                  "content_language": language or None, "final_status": status}
     (out / "site.json").write_text(json.dumps(site_info, indent=2) + "\n", encoding="utf-8")
     landing.update(site_info)
