@@ -56,7 +56,11 @@ Run `arf <command> --help` for the flags.
 
 `arf lint` checks the Markdown source first, then renders it with `arf render`
 and lints the customer-visible HTML and PDF text (render-then-lint). Pass
-`--source-only` to skip the render step.
+`--source-only` to skip the render step. The HTML view parses hidden markup the
+way a browser does (`/>` does not close a non-void element, the first duplicate
+attribute wins, CSS comments are ignored, `<template>` is hidden) and also lints
+each inline element's own text as a separate unit, so hidden text glued to the
+next word is still checked.
 
 ## Collect
 

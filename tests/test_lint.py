@@ -868,6 +868,39 @@ class RenderThenLintTests(unittest.TestCase):
         found = sorted(rule for rule, _, _ in inspect_view(html_text(page)))
         self.assertEqual(found, ["ben-role", "price-in-offer"])
 
+    def test_html_view_hidden_boundaries_follow_browser_parsing(self):
+        def main_text(body):
+            text = html_text(f"<html><body><h2>3. Context</h2><p>{body}</p></body></html>")
+            return "\n".join(line for line in text.splitlines() if not line.startswith("\x1e"))
+        lead = "Ben is a team leader"
+        for body in (f"<span hidden/>{lead}</span>Info.",
+                     f'<span style="display:none" style="color:red">{lead}</span>Info.',
+                     f'<span style="display:/**/none">{lead}</span>Info.',
+                     f'<span style="DISPLAY: /* x */ none /* y">{lead}</span>Info.',
+                     f"<template>{lead}</template>Info.",
+                     f'<span style="visibility:hidden">{lead}</span>Info.',
+                     f'<span style="visibility:collapse">{lead}</span>Info.',
+                     f"מידע<span hidden>{lead}</span>מידע"):
+            with self.subTest(body=body):
+                self.assertIn(f"\n{lead}\n", main_text(body))
+        for body in (f'<span style="color:red" style="display:none">{lead}</span>Info.',
+                     f'<span style="font-size:0">{lead}</span>Info.'):
+            with self.subTest(body=body):
+                self.assertIn(f"{lead}Info.", main_text(body))
+                self.assertIn("ben-role", {rule for rule, _, _ in inspect_view(html_text(
+                    f"<html><body><h2>3. Context</h2><p>{body}</p></body></html>"))})
+
+    def test_html_view_units_add_no_findings_on_ordinary_hebrew(self):
+        probes = ("תכננו מראש <strong>צוות</strong> קטן.", "<b>מראש</b> צוות קטן.",
+                  "הזמינו <strong>מראש</strong> את ה<b>צוות</b> שלנו.", "ראש <em>הצוות</em>")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for probe in probes:
+                with self.subTest(probe=probe):
+                    (root / "report.md").write_text(GOOD.replace("Content.", probe), encoding="utf-8")
+                    _, result = self.run_lint(root)
+                    self.assertEqual([f for f in result["findings"] if f["file"].startswith("rendered:")], [], result)
+
     def test_rendered_views_of_clean_drafts_pass(self):
         for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):
             with self.subTest(draft=name):
