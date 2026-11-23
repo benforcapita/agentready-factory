@@ -4,6 +4,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 import yaml
 
@@ -16,6 +17,8 @@ from arf.orchestrator import (
     IllegalTransition,
     ImmutableRun,
     MemoryStore,
+    RUNTIME_FAKE_IP_POLICY,
+    CollectingSteps,
     Orchestrator,
     check_transition,
     idempotency_key,
@@ -409,6 +412,50 @@ class ReplayTests(unittest.TestCase):
                 code = main(["dry-run", str(SAMPLE), "--out", directory, "--force-lint-failure", *self.fixture_args])
             self.assertEqual(code, 1)
             self.assertIn("Guardrail blocked; run run-0001 guardrail_blocked; fix attempts 2", output.getvalue())
+
+
+class RuntimeFakeIPPolicyTests(unittest.TestCase):
+    def run_collecting(self, environ):
+        collector = Mock(return_value={"requests_made": 0})
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", environ, clear=True):
+            steps = FakeSteps()
+            store = MemoryStore()
+            orchestrator = Orchestrator(store, CollectingSteps(steps, lambda context: Path(directory) / context.run.id,
+                                                               collector=collector), clock=lambda: NOW)
+            submission = orchestrator.submit(request())
+            with self.assertLogs("arf.orchestrator", "INFO") as logs:
+                task = orchestrator.execute(submission.task.id)
+            self.assertEqual(task.status, "Needs review")
+            self.assertEqual(steps.calls[0], ("collect", 0))
+            collector.assert_called_once_with(request().site, Path(directory) / submission.run.id / "evidence",
+                                              fake_ip_policy=collector.call_args.kwargs["fake_ip_policy"])
+        return collector.call_args.kwargs["fake_ip_policy"], logs.output
+
+    def test_orchestrator_passes_doh_verify_to_collect(self):
+        policy, logs = self.run_collecting({})
+        self.assertEqual((RUNTIME_FAKE_IP_POLICY, policy), ("doh_verify", "doh_verify"))
+        self.assertIn("fake_ip_policy=doh_verify (factory runtime default)", logs[0])
+
+    def test_explicit_environment_policy_wins(self):
+        for value in ("refuse", "doh_verify"):
+            with self.subTest(value=value):
+                policy, logs = self.run_collecting({"ARF_FAKE_IP_POLICY": value})
+                self.assertEqual(policy, value)
+                self.assertIn(f"fake_ip_policy={value} (ARF_FAKE_IP_POLICY)", logs[0])
+
+    def test_library_default_stays_refuse(self):
+        from arf.collect import config
+        self.assertEqual(config.FAKE_IP_POLICY, "refuse")
+
+    def test_collect_failure_fails_the_run(self):
+        collector = Mock(side_effect=OSError("collection completed with 1 error(s); see errors.json"))
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore()
+            orchestrator = Orchestrator(store, CollectingSteps(FakeSteps(), lambda context: Path(directory),
+                                                               collector=collector), clock=lambda: NOW)
+            task = orchestrator.execute(orchestrator.submit(request()).task.id)
+        self.assertEqual(task.status, "Failed")
+        self.assertIn("errors.json", store.runs[task.latest_run].error)
 
 
 if __name__ == "__main__":

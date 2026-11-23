@@ -28,7 +28,7 @@ The existing CLI uses these environment variables through `collect()`:
 | Environment | Python kwarg | Default |
 | --- | --- | --- |
 | `ARF_MAX_REQUESTS` | `max_requests` | `100` |
-| `ARF_FAKE_IP_POLICY` | `fake_ip_policy` | `refuse` |
+| `ARF_FAKE_IP_POLICY` | `fake_ip_policy` | `refuse` (factory runtime: `doh_verify`) |
 | `ARF_DOH_ENDPOINT` | `doh_endpoint` | `https://cloudflare-dns.com/dns-query` |
 
 The Python API reads the environment only when the corresponding kwarg is
@@ -39,7 +39,9 @@ scheme/port and host-scoped loopback allowances; the CLI exposes none of these.
 
 ## Fake-IP policy
 
-`refuse` rejects fake-IP DNS answers (`198.18.0.0/15`) by default.
+`refuse` rejects fake-IP DNS answers (`198.18.0.0/15`) by default; the refusal
+ends with `set ARF_FAKE_IP_POLICY=doh_verify (factory runtime default) to
+re-resolve over DoH`.
 `doh_verify` permits an all-fake system DNS answer set only after querying both
 A and AAAA through the configured HTTPS DNS JSON endpoint, with certificate
 verification and the site's request deadline. Every real A/AAAA address must
@@ -54,6 +56,19 @@ the DoH address, to preserve the proxy egress path. Verification repeats at each
 connection, including redirect targets. HTTPS verifies the original hostname
 and uses it for SNI/Host. DoH uses GET queries with `name` and `type=A|AAAA` and
 `Accept: application/dns-json`; endpoint redirects are not followed.
+Each query gets half of the remaining deadline until one timed-out query has
+been retried; that single retry may use the rest of the deadline. A second
+timeout or any other DoH error fails closed. DoH queries are never counted in
+the site request budget.
+
+### Box DNS and the factory runtime
+
+The shared box answers every DNS lookup with a fake proxy IP, so the library
+default (`refuse`) cannot collect there. The factory runtime wraps its run steps
+in `arf.orchestrator.CollectingSteps`, which calls `collect()` with
+`fake_ip_policy=doh_verify` unless `ARF_FAKE_IP_POLICY` is set explicitly, and
+logs `fake_ip_policy=<value> (<source>)`. `arf.collect.config.FAKE_IP_POLICY`
+and bare `arf collect` stay `refuse`.
 
 ## Evidence and errors
 

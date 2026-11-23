@@ -81,7 +81,8 @@ rows for remaining probes/discovery; budget exhaustion alone exits 0.
 Environment configuration (explicit Python kwargs take precedence):
 
 - `ARF_MAX_REQUESTS`: non-negative global budget (default `100`).
-- `ARF_FAKE_IP_POLICY`: `refuse` (default) or `doh_verify`.
+- `ARF_FAKE_IP_POLICY`: `refuse` (library and bare `arf collect` default) or
+  `doh_verify` (factory runtime default).
 - `ARF_DOH_ENDPOINT`: HTTPS DNS JSON endpoint (default
   `https://cloudflare-dns.com/dns-query`).
 
@@ -91,6 +92,14 @@ failed or timed-out verification and mixed fake/real system answers are refused.
 After verification, connections pin the system fake address for proxy egress;
 DoH traffic does not consume the site budget. Requests retain the 10-second
 wall-clock deadline, capped bodies and HTTPS hostname/certificate checks.
+
+**Box DNS and the factory runtime.** The shared box resolves every lookup to a
+fake proxy IP in `198.18.0.0/15`, so bare `arf collect` refuses there with
+`... set ARF_FAKE_IP_POLICY=doh_verify (factory runtime default) to re-resolve
+over DoH`. The factory runtime (`arf.orchestrator.CollectingSteps`) collects
+with `fake_ip_policy=doh_verify` and logs the policy it chose; an explicit
+`ARF_FAKE_IP_POLICY` (including `refuse`) wins. One timed-out DoH query is
+retried once inside the same per-request deadline.
 
 Malformed discovery Locations are recorded as errors; unsafe/invalid redirect
 targets are recorded as refused. Both continue to later discovery paths/hosts.

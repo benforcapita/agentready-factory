@@ -447,6 +447,54 @@ class CollectTests(unittest.TestCase):
                 self.assertEqual(manifest["requests_made"], 82 if answer == "10.0.0.1" else 84)
 
 
+    def test_bare_collect_refuses_fake_ip_with_runtime_hint(self):
+        fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 443))]
+        hint = r"fake-IP answer; cannot verify real egress; set ARF_FAKE_IP_POLICY=doh_verify \(factory runtime default\) to re-resolve over DoH$"
+        with patch("arf.collect.transport.socket.socket") as sock:
+            with self.assertRaisesRegex(Refused, hint):
+                collect("https://shop.example", self.out, resolver=Mock(return_value=fake))
+            self.out = self.directory / "cli"
+            stderr = StringIO()
+            with patch.object(PinnedHTTPConnection, "resolve", return_value=fake), \
+                    patch("arf.cli.validate_request", return_value=(Mock(site="https://shop.example"), [])), \
+                    redirect_stderr(stderr):
+                code = main(["collect", "request.yaml", "--out", str(self.out)])
+            sock.assert_not_called()
+        self.assertEqual(code, 1)
+        self.assertRegex(stderr.getvalue().strip(), "^arf collect: shop.example: " + hint)
+
+    def test_doh_timeout_retry_is_not_counted_in_site_budget(self):
+        class ProxySocket(socket.socket):
+            def connect(proxy, address):
+                return super().connect(("127.0.0.1", address[1]))
+
+        def fake_resolve(host, port, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", port))]
+
+        calls = []
+
+        def getresponse():
+            calls.append(None)
+            if len(calls) == 1:
+                raise TimeoutError("timed out")
+            kind = https.return_value.request.call_args.args[1]
+            record = {"type": 1, "data": "93.184.216.34"} if "type=A&" in kind + "&" else \
+                {"type": 28, "data": "2606:4700:4700::1111"}
+            response = Mock(status=200)
+            response.read1.side_effect = [json.dumps({"Status": 0, "Answer": [record]}).encode(), b""]
+            return response
+
+        with patch("arf.collect.transport.socket.socket", ProxySocket), \
+                patch("arf.collect.doh.http.client.HTTPSConnection") as https:
+            https.return_value.getresponse.side_effect = getresponse
+            manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(), fake_ip_policy="doh_verify")
+        self.assertEqual(len(calls), 2 * 82 + 1)
+        self.assertEqual(manifest["requests_made"], 82)
+        self.assertEqual(manifest["request_count"]["per_host"], {"shop.example": 41, "www.shop.example": 41})
+        self.assertEqual(sum(self.instance.hits.values()), 82)
+        self.assertEqual(manifest["doh_answers"]["shop.example"], ["2606:4700:4700::1111", "93.184.216.34"])
+
+
 class DoHJSONTests(unittest.TestCase):
     def resolve(self, payloads, status=200):
         responses = []
@@ -490,6 +538,49 @@ class DoHJSONTests(unittest.TestCase):
                 self.resolve([payload])
         with self.assertRaisesRegex(ValueError, "HTTP status"):
             self.resolve([{}], status=302)
+
+
+    def test_timeout_is_retried_once_within_deadline(self):
+        ok = [{"Status": 0, "Answer": [{"type": 1, "data": "93.184.216.34"}]}, {"Status": 0}]
+        responses = []
+        for payload in ok:
+            response = Mock(status=200)
+            response.read1.side_effect = [json.dumps(payload).encode(), b""]
+            responses.append(response)
+        with patch("arf.collect.doh.http.client.HTTPSConnection") as https:
+            https.return_value.getresponse.side_effect = [TimeoutError("timed out"), *responses]
+            started = monotonic()
+            answers = resolve_doh("shop.example", endpoint=config.DOH_ENDPOINT, timeout=1)
+        self.assertLess(monotonic() - started, 1)
+        self.assertEqual(answers, ["93.184.216.34"])
+        timeouts = [call.kwargs["timeout"] for call in https.call_args_list]
+        self.assertEqual(len(timeouts), 3)
+        self.assertLessEqual(timeouts[0], 0.5)
+        self.assertLessEqual(timeouts[1], 1)
+        self.assertGreater(timeouts[1], timeouts[0])
+        self.assertIn("type=A", https.return_value.request.call_args_list[1].args[1])
+
+    def test_second_timeout_and_other_errors_are_not_retried(self):
+        for errors, expected in (([TimeoutError("timed out")] * 3, TimeoutError),
+                                 ([ConnectionRefusedError("refused")] * 2, ConnectionRefusedError)):
+            with self.subTest(expected=expected), patch("arf.collect.doh.http.client.HTTPSConnection") as https:
+                https.return_value.getresponse.side_effect = errors
+                with self.assertRaises(expected):
+                    resolve_doh("shop.example", endpoint=config.DOH_ENDPOINT, timeout=1)
+                self.assertEqual(https.return_value.getresponse.call_count,
+                                 2 if expected is TimeoutError else 1)
+
+    def test_retry_never_extends_the_deadline(self):
+        def slow(*args, **kwargs):
+            sleep(0.06)
+            raise TimeoutError("timed out")
+
+        with patch("arf.collect.doh.http.client.HTTPSConnection") as https:
+            https.return_value.getresponse.side_effect = slow
+            started = monotonic()
+            with self.assertRaises(TimeoutError):
+                resolve_doh("shop.example", endpoint=config.DOH_ENDPOINT, timeout=0.1)
+        self.assertLess(monotonic() - started, 0.2)
 
 
 class CollectCLITests(unittest.TestCase):

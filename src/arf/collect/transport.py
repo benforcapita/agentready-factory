@@ -156,7 +156,8 @@ class PinnedHTTPConnection(http.client.HTTPConnection):
             if not all(fake):
                 raise Refused(f"{self.host}: mixed fake-IP and real DNS answers")
             if self.fake_ip_policy != "doh_verify":
-                raise Refused(f"{self.host}: fake-IP answer; cannot verify real egress")
+                raise Refused(f"{self.host}: fake-IP answer; cannot verify real egress; "
+                              "set ARF_FAKE_IP_POLICY=doh_verify (factory runtime default) to re-resolve over DoH")
             self.verify_doh()
         else:
             if any(not self.policy.allows(self.host, address) for address in addresses):

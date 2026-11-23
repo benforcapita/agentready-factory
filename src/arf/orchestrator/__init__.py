@@ -9,6 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import json
+import logging
+import os
+from pathlib import Path
 from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -18,6 +21,9 @@ from .eval import EvalMode, EvalResult
 
 ISRAEL = ZoneInfo("Asia/Jerusalem")
 MAX_FIX_ATTEMPTS = 2
+RUNTIME_FAKE_IP_POLICY = "doh_verify"
+
+log = logging.getLogger(__name__)
 
 RUN_STATUSES = next(p.options for p in RUNS.properties if p.name == "Status")
 FINISHED_RUN_STATUSES = frozenset({"succeeded", "guardrail_blocked", "failed", "cancelled"})
@@ -242,6 +248,48 @@ class Steps(Protocol):
     def render(self, context: RunContext) -> None: ...
 
     def check(self, context: RunContext) -> dict[str, Any]: ...
+
+
+def runtime_fake_ip_policy() -> str:
+    """The factory runtime's fake-IP policy: an explicit ARF_FAKE_IP_POLICY wins, else doh_verify.
+
+    The library default (`arf.collect.config.FAKE_IP_POLICY`) stays `refuse` for bare `arf collect`.
+    """
+    return os.environ.get("ARF_FAKE_IP_POLICY", RUNTIME_FAKE_IP_POLICY)
+
+
+class CollectingSteps:
+    """Wraps run steps so the collect step gathers evidence with the factory runtime fake-IP policy.
+
+    The evidence bundle goes to `directory(context) / "evidence"` after the wrapped collect step runs.
+    """
+
+    def __init__(self, steps: Steps, directory: Callable[[RunContext], Any], *,
+                 collector: Callable[..., dict[str, Any]] | None = None) -> None:
+        self.steps = steps
+        self.directory = directory
+        self.collector = collector
+
+    def collect(self, context: RunContext) -> None:
+        self.steps.collect(context)
+        collector = self.collector
+        if collector is None:
+            from ..collect import collect as collector
+        policy = runtime_fake_ip_policy()
+        source = "ARF_FAKE_IP_POLICY" if "ARF_FAKE_IP_POLICY" in os.environ else "factory runtime default"
+        log.info("collect %s: fake_ip_policy=%s (%s)", context.request.site, policy, source)
+        context.state["fake_ip_policy"] = policy
+        context.state["evidence"] = collector(context.request.site, Path(self.directory(context)) / "evidence",
+                                              fake_ip_policy=policy)
+
+    def draft(self, context: RunContext, fix: list[dict[str, Any]] | None) -> None:
+        self.steps.draft(context, fix)
+
+    def render(self, context: RunContext) -> None:
+        self.steps.render(context)
+
+    def check(self, context: RunContext) -> dict[str, Any]:
+        return self.steps.check(context)
 
 
 @dataclass(frozen=True)
