@@ -15,6 +15,7 @@ MESSAGES = {
     "generic-price": "Acknowledge generic price/cost language with its context.",
     "currency-outside-offer": "Acknowledge currency amounts outside the proposal.",
     "code-block": "Customer reports must not contain code.",
+    "bidi-override": "Remove left-to-right or right-to-left override controls (U+202D/U+202E) from the artifact.",
     "implementation-detail": "Remove implementation tokens from the customer report.",
     "extra-offer-steps": "The offer must contain at most four pillars.",
     "detailed-offer-step": "Offer pillars must be at most 40 words and not step-by-step instructions.",
@@ -65,6 +66,7 @@ TRACKERS = ("google-analytics.com", "googletagmanager.com", "doubleclick.net", "
 BLOCKED = re.compile(r"חסום|נחסם|נחסמת|חסימה|\bblock(?:ed|ing)\b", re.I)
 UNCERTAIN = re.compile(r"לא[\s-]+עקבי|אינה[\s-]+עקבית|לא[\s-]+הוכח|לא[\s-]+מוכח|לא[\s-]+הוכחה|not[\s-]+(?:consistent|proven)|inconsistent", re.I)
 DASH_LIKES = "\u02d7\u2043\u2212\u2796"
+BIDI_OVERRIDE = re.compile(r"[\u202D\u202E]")
 
 
 def normalize_for_matching(text):
@@ -84,6 +86,7 @@ def tracker(url):
 
 
 def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_hosts=None):
+    bidi_text = unescape(content)
     content = normalize_for_matching(content)
     if config:
         config = {key: normalize_for_matching(value) for key, value in config.items()}
@@ -91,6 +94,11 @@ def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_
 
     def add(rule, line, excerpt):
         findings.append((rule, line, excerpt))
+
+    for match in BIDI_OVERRIDE.finditer(bidi_text):
+        codepoint = ord(match[0])
+        line = bidi_text.count("\n", 0, match.start()) + 1
+        add("bidi-override", line, f"U+{codepoint:04X}")
 
     html = HTMLDocument()
     is_html = file.endswith(".html")
@@ -185,7 +193,7 @@ def inspect_artifact(file, content, phase, *, final=False, config=None, allowed_
         report_structure(text, lambda rule, line, excerpt: structural.append((rule, line, excerpt)))
         if is_html:
             findings = [(rule, html.source_line(line), excerpt) if rule not in {
-                "tracking-pixel", "code-block", "tracking-param", "link-shortener", "non-evidence-url", "secret", "missing-draft-marker"
+                "tracking-pixel", "code-block", "tracking-param", "link-shortener", "non-evidence-url", "secret", "missing-draft-marker", "bidi-override"
             } else (rule, line, excerpt) for rule, line, excerpt in findings]
         findings.extend((rule, html.source_line(line) if is_html else line, excerpt) for rule, line, excerpt in structural)
     return findings
