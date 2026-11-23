@@ -9,7 +9,9 @@ import re
 import unicodedata
 
 from .document import sections, tables
+from .matching import Skeleton
 from .pdf import has_draft_marker
+from .rendered import RENDERED_RULES, inspect_view, render_views
 from .rules import MESSAGES, SECRET, SOURCE_ALIASES, URL, WARNINGS, host, normalize_for_matching
 from .rules import inspect_artifact as scan_artifact
 
@@ -107,7 +109,20 @@ def load_findings(raw):
     return data["findings"]
 
 
-def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_config=None):
+def rendered_findings(source, existing=()):
+    """Findings from T5's rendered views of report.md that the source lint did not already report."""
+    seen = {(f["rule"], Skeleton(f["excerpt"]).text) for f in existing if f["rule"] in RENDERED_RULES}
+    result = []
+    for view, text in render_views(source):
+        for rule, line, excerpt in inspect_view(text):
+            key = (rule, Skeleton(normalized(excerpt), rendered=True).text)
+            if key not in seen:
+                seen.add(key)
+                result.append(finding(rule, view, line, excerpt))
+    return result
+
+
+def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_config=None, render=True):
     if phase not in {"shadow", "reviewed", "volume"}:
         raise ValueError("invalid phase")
     root = Path(draft_dir)
@@ -163,6 +178,14 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
         if (root / file).exists():
             content = read(file).decode("utf-8")
             findings.extend(inspect_artifact(file, content, phase, final=final, config=config, allowed_hosts=allowed_hosts))
+    if render:
+        try:
+            customer = [f for f in findings if f["file"] in {"report.md", "report.html"}]
+            findings.extend(rendered_findings((root / "report.md").read_text(encoding="utf-8"), customer))
+        except Exception as error:
+            raise ValueError(f"render-then-lint could not render report.md: {error}") from error
+    else:
+        skip("render-then-lint", "--source-only: T5's rendered HTML/PDF text was not linted; run without it before a draft leaves the factory.")
     if manifest is not None:
         for offset, title, body in sections(markdown):
             if not re.search(r"נספח|Appendix", title, re.I):
