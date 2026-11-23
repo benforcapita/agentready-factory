@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "n1": {
+    "decision": "Fail closed when punctuation separates a prohibited pricing phrase.",
+    "hard_fail": [
+      "price_list",
+      "price.list",
+      "price/list",
+      "price: list",
+      "price = list",
+      "price, list",
+      "price. list",
+      "price; list",
+      "price? list",
+      "price! list"
+    ]
+  },
+  "n3": {
+    "decision": "Add only missing documented role and pricing variants; pin already-supported variants.",
+    "hard_fail": [
+      {"text": "R&D team manager", "rule": "ben-role", "new": true},
+      {"text": "R&D team managers", "rule": "ben-role", "new": true},
+      {"text": "head of R&D", "rule": "ben-role", "new": true},
+      {"text": "heads of R&D", "rule": "ben-role", "new": true},
+      {"text": "team leads", "rule": "ben-role", "new": false},
+      {"text": "engineering managers", "rule": "ben-role", "new": false},
+      {"text": "R&D managers", "rule": "ben-role", "new": false},
+      {"text": "dev team managers", "rule": "ben-role", "new": false},
+      {"text": "development team managers", "rule": "ben-role", "new": false},
+      {"text": "teamlead", "rule": "ben-role", "new": false},
+      {"text": "engineeringmanager", "rule": "ben-role", "new": false},
+      {"text": "R&Dmanager", "rule": "ben-role", "new": false},
+      {"text": "devteam manager", "rule": "ben-role", "new": false},
+      {"text": "R and D manager", "rule": "ben-role", "new": false},
+      {"text": "ראשי צוות", "rule": "ben-role", "new": false},
+      {"text": "מנהלי צוות פיתוח", "rule": "ben-role", "new": false},
+      {"text": "quotation", "rule": "price-in-offer", "new": false},
+      {"text": "quotations", "rule": "price-in-offer", "new": false},
+      {"text": "price quotation", "rule": "price-in-offer", "new": false},
+      {"text": "per_hour", "rule": "price-in-offer", "new": false},
+      {"text": "per/hour", "rule": "price-in-offer", "new": false},
+      {"text": "per.hour", "rule": "price-in-offer", "new": false},
+      {"text": "perhour", "rule": "price-in-offer", "new": false},
+      {"text": "hourly_rate", "rule": "price-in-offer", "new": false},
+      {"text": "hourly/rate", "rule": "price-in-offer", "new": false},
+      {"text": "hourly.rate", "rule": "price-in-offer", "new": false},
+      {"text": "hourlyrate", "rule": "price-in-offer", "new": false},
+      {"text": "מחירונים", "rule": "price-in-offer", "new": true},
+      {"text": "עלויות השירות", "rule": "price-in-offer", "new": true}
+    ],
+    "negative_pins": [
+      {"text": "head of R&Ds", "rules": []}
+    ]
+  },
+  "n4": {
+    "decision": "Keep phrase-based bans, pin B2 negatives, and defer semantic judgment to PRO-405.",
+    "semantic_judgment_deferred_to": "PRO-405",
+    "intentionally_hard_fail": [
+      {"text": "מראש צוות", "rule": "ben-role"},
+      {"text": "שמנהל פיתוח", "rule": "ben-role"},
+      {"text": "quoted", "rule": "price-in-offer"},
+      {"text": "discounted", "rule": "price-in-offer"}
+    ],
+    "b2_no_hard_fail": [
+      "בשלב ראשון צוות האתר יוסיף נתונים מובנים לדפי המוצר.",
+      "ראשית, צוות האתר…",
+      "בדף הראשי צוות האתר…",
+      "מנהלים פתוחים",
+      "גם מנהל ופיתוח"
+    ],
+    "warning_only": [
+      {"text": "ההצעה מחירים", "rule": "generic-price"}
+    ],
+    "ordinary_word_boundaries_pass": [
+      "steam leads",
+      "quotationary",
+      "discountedly",
+      "unquoted",
+      "engineering managerial",
+      "paper hour"
+    ]
+  },
+  "n5": {
+    "decision": "Reject LRO/RLO controls; do not reconstruct visual bidi ordering. Strip other controls for matching but allow them alone.",
+    "control_matrix": [
+      {"name": "LRE", "codepoint": "202A", "disposition": "allow"},
+      {"name": "RLE", "codepoint": "202B", "disposition": "allow"},
+      {"name": "PDF", "codepoint": "202C", "disposition": "allow"},
+      {"name": "LRO", "codepoint": "202D", "disposition": "reject"},
+      {"name": "RLO", "codepoint": "202E", "disposition": "reject"},
+      {"name": "LRI", "codepoint": "2066", "disposition": "allow"},
+      {"name": "RLI", "codepoint": "2067", "disposition": "allow"},
+      {"name": "FSI", "codepoint": "2068", "disposition": "allow"},
+      {"name": "PDI", "codepoint": "2069", "disposition": "allow"},
+      {"name": "LRM", "codepoint": "200E", "disposition": "allow"},
+      {"name": "RLM", "codepoint": "200F", "disposition": "allow"},
+      {"name": "ALM", "codepoint": "061C", "disposition": "allow"}
+    ],
+    "raw_override_payloads": [
+      {"id": "reversed-rlo", "text": "\u202e reganam maet ved", "codepoints": ["202E"]},
+      {"id": "unterminated-lro", "text": "\u202d override remains open", "codepoints": ["202D"]},
+      {"id": "nested-overrides", "text": "outer \u202e nested \u202d payload", "codepoints": ["202E", "202D"]}
+    ],
+    "html_numeric_entities": [
+      {"entity": "&#x202D;", "codepoint": "202D"},
+      {"entity": "&#8237;", "codepoint": "202D"},
+      {"entity": "&#x202E;", "codepoint": "202E"},
+      {"entity": "&#8238;", "codepoint": "202E"}
+    ],
+    "existing_confusable_pins": [
+      {"text": "tеam lеad", "rule": "ben-role"},
+      {"text": "50 UЅD", "rule": "price-in-offer"}
+    ],
+    "named_gaps": ["hourly", "fifty dollars"]
+  },
+  "currencies": {
+    "decision": "Do not expand MoneyMatcher without an agreed token list; preserve existing support only.",
+    "current_support_pins": [
+      "50 EUR",
+      "50 GBP",
+      "50 JPY",
+      "50 CHF",
+      "50 AUD",
+      "50 CAD",
+      "50 SGD",
+      "50 AED",
+      "HK$",
+      "NZ$",
+      "A$",
+      "C$",
+      "R$",
+      "50 HKD",
+      "50 NZD",
+      "50 BRL"
+    ]
+  }
+}

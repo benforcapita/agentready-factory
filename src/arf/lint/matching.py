@@ -272,7 +272,7 @@ class MoneyMatcher:
 
 
 PRICING_PHRASES = (
-    "הצעת מחיר", "תמחור", "עלות השירות", "מחירון", "price list", "price lists", "pricing",
+    "הצעת מחיר", "תמחור", "עלות השירות", "עלויות השירות", "מחירון", "מחירונים", "price list", "price lists", "pricing",
     "quote", "quotes", "quotation", "quotations", "price quote", "price quotes",
     "price quotation", "price quotations", "fee", "fees", "per hour", "hourly rate",
     "hourly rates", "discount", "discounts", "retainer", "retainers", "quoted", "discounted", "per hr",
@@ -280,9 +280,10 @@ PRICING_PHRASES = (
 ROLE_PHRASES = tuple(
     phrase + suffix for phrase in (
         "dev team manager", "development team manager", "engineering manager",
-        "R&D manager", "R and D manager", "team lead", "team leader", "development manager", "tech lead",
+        "R&D manager", "R&D team manager", "R and D manager", "team lead", "team leader",
+        "development manager", "tech lead",
     ) for suffix in ("", "s")
-) + tuple(dict.fromkeys(
+) + ("head of R&D", "heads of R&D") + tuple(dict.fromkeys(
     phrase.replace("צוות", team).replace("פיתוח", development)
     for phrase in ("ראש צוות", "ראשי צוות", "ראש צוות פיתוח", "ראשי צוות פיתוח",
                    "מנהל צוות פיתוח", "מנהלי צוות פיתוח", "מנהל פיתוח", "מנהלי פיתוח")
