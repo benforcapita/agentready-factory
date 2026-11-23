@@ -7,10 +7,11 @@ import json
 from pathlib import Path
 import re
 import unicodedata
+import zlib
 
 from .document import sections, tables
 from .matching import Skeleton
-from .pdf import has_draft_marker
+from .pdf import Document, has_draft_marker
 from .rendered import RENDERED_RULES, inspect_view, render_views
 from .rules import MESSAGES, SECRET, SOURCE_ALIASES, URL, WARNINGS, host, normalize_for_matching
 from .rules import inspect_artifact as scan_artifact
@@ -122,6 +123,13 @@ def rendered_findings(source, existing=()):
     return result
 
 
+def pdf_page_count(pdf):
+    try:
+        return len(list(Document(pdf).pages()))
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError, zlib.error):
+        return len(re.findall(rb"/Type\s*/Page\b", pdf))
+
+
 def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_config=None, render=True):
     if phase not in {"shadow", "reviewed", "volume"}:
         raise ValueError("invalid phase")
@@ -226,7 +234,7 @@ def lint(draft_dir, phase="shadow", ack_path=None, *, final=False, factory_confi
             item = finding("missing-draft-marker", "report.pdf", 1, "PDF marker unverifiable")
             item["message"] = "PDF marker unverifiable"
             findings.append(item)
-        pages = len(re.findall(rb"/Type\s*/Page\b", pdf))
+        pages = pdf_page_count(pdf)
         if pages > 4:
             findings.append(finding("pdf-length", "report.pdf", 1, f"{pages} pages"))
         elif not pages:
