@@ -66,7 +66,7 @@ def hiding_selectors(css):
 
 
 def css_hidden(attrs, tag="", selectors=()):
-    attrs = dict(first_attributes(attrs))
+    attrs = dict(attrs)
     classes, ids = set((attrs.get("class") or "").split()), {attrs.get("id") or ""}
     return "hidden" in attrs or tag in HIDDEN_ELEMENTS or bool(HIDING.search(declarations(attrs.get("style") or ""))) or any(
         rule_tag in {"*", tag} and rule_classes <= classes and rule_ids <= ids

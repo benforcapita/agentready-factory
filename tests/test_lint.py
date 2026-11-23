@@ -897,6 +897,7 @@ class RenderThenLintTests(unittest.TestCase):
                      f'<span style="background-color:transparent;font-size:0.9em">{lead}</span>Info.',
                      f'<span class="p">{lead}</span>Info.',
                      f'<style>.h:hover{{display:none}} .k{{display:none}}</style><span class="h">{lead}</span>Info.',
+                     f'<style>div.h, #k, .h.k{{display:none}}</style><span id="j" class="h">{lead}</span>Info.',
                      f"<b>{lead}</b>Info."):
             with self.subTest(body=body):
                 self.assertIn(f"{lead}Info.", view(body))
