@@ -14,6 +14,8 @@ def main(argv=None):
     parser.add_argument("--phase", choices=("shadow", "reviewed", "volume"), default="shadow")
     parser.add_argument("--final", action="store_true", help="Skip draft markers for Ben's final re-render")
     parser.add_argument("--factory-config", type=Path, help="JSON or flat YAML Factory Config")
+    parser.add_argument("--source-only", action="store_true",
+                        help="Fast pre-check: skip linting T5's rendered HTML/PDF text")
     args = parser.parse_args(argv)
     output = args.out if args.out is not None else args.draft_dir / "lint.json"
     try:
@@ -25,7 +27,8 @@ def main(argv=None):
             protected.append(args.factory_config)
         if output.resolve() in {path.resolve() for path in protected}:
             raise ValueError("output must not overwrite an input artifact or ack file")
-        result = lint(args.draft_dir, args.phase, args.ack, final=args.final, factory_config=args.factory_config)
+        result = lint(args.draft_dir, args.phase, args.ack, final=args.final, factory_config=args.factory_config,
+                      render=not args.source_only)
         output.write_text(serialize(result), encoding="utf-8")
     except (OSError, ValueError) as error:
         parser.exit(2, f"error: {error}\n")

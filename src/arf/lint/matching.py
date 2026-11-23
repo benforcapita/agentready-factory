@@ -133,9 +133,12 @@ class Match:
 
 
 class Skeleton:
-    def __init__(self, source, *, money=False, preserve_hebrew=False):
+    def __init__(self, source, *, money=False, preserve_hebrew=False, rendered=False):
         self.source = source
-        self.visible, self.visible_spans = visible(source)
+        if rendered:
+            self.visible, self.visible_spans = source, [(i, i + 1) for i in range(len(source))]
+        else:
+            self.visible, self.visible_spans = visible(source)
         pairs = [(char, span) for char, span in units(self.visible, self.visible_spans,
                                                        preserve_hebrew=preserve_hebrew)
                  if money or letter_or_number(char)]
@@ -224,8 +227,8 @@ class PhraseMatcher:
                                  key=lambda p: (-len(p), p)))
         self.hebrew = tuple({hebrew_pattern(phrase) for phrase in phrases if re.search("[א-ת]", phrase)})
 
-    def finditer(self, source):
-        skeleton, found = Skeleton(source), []
+    def finditer(self, source, *, rendered=False):
+        skeleton, found = Skeleton(source, rendered=rendered), []
         for key in self.keys:
             start = skeleton.text.find(key)
             while start >= 0:
@@ -233,7 +236,7 @@ class PhraseMatcher:
                 if skeleton.boundary(start, end):
                     found.append(skeleton.match(start, end))
                 start = skeleton.text.find(key, start + 1)
-        hebrew_skeleton = Skeleton(source, preserve_hebrew=True)
+        hebrew_skeleton = Skeleton(source, preserve_hebrew=True, rendered=rendered)
         for pattern in self.hebrew:
             cursor = 0
             while match := pattern.search(hebrew_skeleton.text, cursor):
@@ -257,10 +260,10 @@ class MoneyMatcher:
     pattern = re.compile(rf"\d+{currency}|{currency}\d+|(?:us|ca|hk|nz|au|sg|a|c|r)?\$|[₪€£¥₹]")
     code_pattern = re.compile(rf"\d+{codes}|{codes}\d+")
 
-    def finditer(self, source):
+    def finditer(self, source, *, rendered=False):
         found = {}
-        for skeleton, pattern in ((Skeleton(source, money=True), self.pattern),
-                                  (Skeleton(source), self.code_pattern)):
+        for skeleton, pattern in ((Skeleton(source, money=True, rendered=rendered), self.pattern),
+                                  (Skeleton(source, rendered=rendered), self.code_pattern)):
             for match in pattern.finditer(skeleton.text):
                 if skeleton.boundary(match.start(), match.end()):
                     mapped = skeleton.match(match.start(), match.end())

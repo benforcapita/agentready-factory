@@ -77,10 +77,10 @@ an already-yod-final first stem such as ראשי, avoiding the B2 false positive
 
 Markdown link destinations are excluded, but footnote text and reference labels
 remain in the source skeleton and are linted; numeric footnote markers remain
-syntax. This closes the small B3 source-text case; a complete render-then-lint
-contract remains a follow-up. Hidden/display:none HTML subtrees and numeric
-superscript/subscript annotations retain their earlier source-masking behavior,
-not a complete renderer visibility model. Previously supported leader/feminine/
+syntax. This closes the small B3 source-text case. Hidden/display:none HTML
+subtrees and numeric superscript/subscript annotations keep their source-masking
+behavior in this pre-check; render-then-lint below covers what T5 delivers.
+Previously supported leader/feminine/
 development role variants, quoted/discounted/per-hr pricing, and currency forms
 remain unchanged; this fix adds no further catch classes. Semantic context is not
 inferred.
@@ -92,6 +92,46 @@ override visual reversal is not reconstructed (requires rendered bidi semantics)
 N4 quote/team lead context remains phrase-based per the LLD, not semantic judging.
 N5 confusables are a frozen curated derivative of security/latest (458 source
 agreements and 48 author folds), not a verbatim subset or a live network input.
+
+## Render-then-lint (PRO-561)
+
+The Markdown source lint above is a fast pre-check. `arf lint` then renders
+`report.md` with T5 (`render_html`, then the same WeasyPrint layout as
+`render_pdf`) and runs `price-in-offer`, `currency-outside-offer` and `ben-role`
+— the rules whose source matcher masks markup — on two customer-visible views,
+using the same phrase lists, Hebrew matching, normalization and proposal-section
+logic as the source lint. No rule definition changes.
+
+- `rendered:report.pdf`: the text WeasyPrint lays out on the PDF pages, after CSS
+  (class selectors, generated content, `visibility`). This is what B3 footnote
+  and reference-label text becomes once rendered.
+- `rendered:report.html`: every text node, HTML comment and reader-visible
+  attribute value in the delivered HTML body, including `hidden`, `display:none`
+  and `visibility:hidden` subtrees; `<script>`, `<style>` and the document's real
+  `<head>` (before `<body>`) are not text. A `<head>` tag inside the body is
+  ignored, as browsers and WeasyPrint do, so its content and everything after it
+  is still linted. Each hidden subtree and comment is linted as its own unit: it
+  is bounded by line breaks, so hidden text never runs into the adjacent visible
+  word. Reader-visible attributes are `title`, `alt`, `aria-label`,
+  `aria-description`, `aria-roledescription`, `aria-placeholder`,
+  `aria-valuetext`, `placeholder`, `value` on `input`/`button`/`option` and
+  `label` on `option`/`optgroup`/`track`. Their text is linted at the end of the
+  enclosing block, so the same section logic applies.
+
+Hidden-HTML rule (N2): hiding is not an exemption. `report.html` is itself a
+customer deliverable, and hidden text and comments stay readable through view
+source, copy, search, reader modes and AI agents. A rule match inside hidden HTML
+is the same finding as in visible text. The same holds for attribute text the
+reader can see (hover tooltip, image fallback, form text) or that assistive tech,
+view source and AI agents read: it is customer-visible and linted like hidden
+text. Hidden or attribute text that matches no rule passes.
+
+A rendered finding is reported (file `rendered:report.pdf` or
+`rendered:report.html`, line in that view) only when `report.md` or `report.html`
+has no finding with the same rule and matched text. A render failure is a lint
+error (exit 2). `--source-only` runs just the pre-check and records a
+`render-then-lint` skipped check; it must not be used for a draft that leaves the
+factory. Fixtures: `fixtures/lint/render/cases.json`.
 
 ## Input contracts and skips
 

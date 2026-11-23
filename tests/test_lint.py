@@ -13,6 +13,7 @@ from arf.lint import inspect_artifact, lint, load_config
 from arf.lint.markers import DRAFT_MARKER
 from arf.lint.confusables import CONFUSABLES
 from arf.lint.matching import HEBREW_PREFIXES, HEBREW_SUFFIXES, MoneyMatcher, PhraseMatcher, PRICING_PHRASES, ROLE_PHRASES, Skeleton, hebrew_pattern
+from arf.lint.rendered import html_text, inspect_view, render_views
 from arf.lint.pdf import Document, PDFError, decode_text, has_draft_marker, unicode_map
 from arf.lint.rules import DASH_LIKES, MESSAGES, WARNINGS, normalize_for_matching
 
@@ -787,6 +788,109 @@ class LintTests(unittest.TestCase):
             first = (root / "lint.json").read_bytes()
             self.assertEqual(self.cli(root).returncode, 0)
             self.assertEqual((root / "lint.json").read_bytes(), first)
+
+
+class RenderThenLintTests(unittest.TestCase):
+    PLACEHOLDER = {"3": "Content.", "5": "Talk."}
+
+    def run_lint(self, root, *args):
+        process = subprocess.run([sys.executable, "-m", "arf.lint", str(root), *args],
+                                 cwd=ROOT, text=True, capture_output=True)
+        return process.returncode, json.loads((root / "lint.json").read_text(encoding="utf-8"))
+
+    def test_render_then_lint_fixtures(self):
+        cases = json.loads((FIXTURES / "render/cases.json").read_text(encoding="utf-8"))["cases"]
+        self.assertTrue({c["id"].split("-")[0] for c in cases} >= {"B3", "N2"})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for case in cases:
+                with self.subTest(case=case["id"]):
+                    draft = GOOD.replace(self.PLACEHOLDER[case["section"]], case["probe"])
+                    (root / "report.md").write_text(draft, encoding="utf-8")
+                    _, source = self.run_lint(root, "--source-only")
+                    self.assertIn("render-then-lint", {s["rule"] for s in source["skipped_checks"]})
+                    source_hard = {f["rule"] for f in source["findings"] if f["level"] == "hard_fail"}
+                    after, result = self.run_lint(root)
+                    self.assertNotIn("render-then-lint", {s["rule"] for s in result["skipped_checks"]})
+                    hard = {f["rule"] for f in result["findings"] if f["level"] == "hard_fail"}
+                    views = dict(render_views(draft))
+                    if case["rule"] is None:
+                        self.assertFalse(source_hard | hard, result)
+                        self.assertFalse([f for f in result["findings"] if f["file"].startswith("rendered:")])
+                        for text in views.values():
+                            self.assertEqual(inspect_view(text), [])
+                        continue
+                    self.assertEqual(source_hard, {case["rule"]} if case["source_hard"] else set(), source)
+                    self.assertEqual(after, 1, result)
+                    self.assertEqual(hard, {case["rule"]})
+                    self.assertIn(case["rule"], {rule for rule, _, _ in inspect_view(views[case["view"]])})
+                    if not case["source_hard"]:
+                        self.assertIn(case["view"], {f["file"] for f in result["findings"] if f["rule"] == case["rule"]})
+
+    def test_html_view_reads_reader_visible_attributes(self):
+        def page(section, body):
+            return (f"<html><head><title>Ben is a team leader</title></head><body><h2>{section}</h2>"
+                    f"<p>{body}</p><h2>9. Other</h2><p>x</p></body></html>")
+        cases = (
+            ("3. Context", '<abbr title="Ben is a team leader">note</abbr>', "ben-role"),
+            ("3. Context", '<span title="price list">note</span>', "price-in-offer"),
+            ("5. Talk", '<span title="50 USD">here</span>', "price-in-offer"),
+            ("3. Context", '<img alt="Ben is a team leader" src="figure.png">', "ben-role"),
+            ("3. Context", '<span aria-label="tech lead">here</span>', "ben-role"),
+            ("3. Context", '<span hidden aria-description="tech lead">x</span>', "ben-role"),
+            ("3. Context", '<input placeholder="price list">', "price-in-offer"),
+            ("3. Context", '<select><option label="tech lead" value="a">a</option></select>', "ben-role"),
+            ("3. Context", '<abbr title="Internal note">note</abbr>', None),
+            ("3. Context", '<span data-note="tech lead" class="price list">x</span>', None),
+        )
+        for section, body, rule in cases:
+            with self.subTest(body=body):
+                found = {found_rule for found_rule, _, _ in inspect_view(html_text(page(section, body)))}
+                self.assertEqual(found, {rule} if rule else set())
+
+    def test_stray_head_keeps_html_view(self):
+        probe = '<span style="display:none">50 USD</span> מידע. <abbr title="Ben is a team leader">x</abbr> <!-- tech lead -->'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for head in ("", "<head>"):
+                with self.subTest(head=head):
+                    draft = GOOD.replace("Content.", "Content.\n\n" + head).replace("Talk.", probe)
+                    (root / "report.md").write_text(draft, encoding="utf-8")
+                    after, result = self.run_lint(root)
+                    self.assertEqual(after, 1, result)
+                    rendered = sorted(f["rule"] for f in result["findings"] if f["file"] == "rendered:report.html")
+                    self.assertEqual(rendered, ["ben-role", "ben-role", "price-in-offer"], result)
+
+    def test_html_view_ignores_head_tags_inside_body(self):
+        page = ("<html><head><title>Ben is a team leader</title><style>p{}</style></head><body>"
+                "<h2>3. Context</h2><p>a</p><head><p>b <span hidden>tech lead</span>c</p></head>"
+                "<p><span title=\"price list\">x</span></p></body></html>")
+        found = sorted(rule for rule, _, _ in inspect_view(html_text(page)))
+        self.assertEqual(found, ["ben-role", "price-in-offer"])
+
+    def test_rendered_views_of_clean_drafts_pass(self):
+        for name, path in (("unit", None), ("lehamim", GOLDEN / "report.md")):
+            with self.subTest(draft=name):
+                source = GOOD if path is None else path.read_text(encoding="utf-8")
+                views = dict(render_views(source))
+                self.assertEqual(set(views), {"rendered:report.pdf", "rendered:report.html"})
+                for view, text in views.items():
+                    self.assertTrue(text.strip(), view)
+                    if path is None:
+                        self.assertEqual(inspect_view(text), [], view)
+
+    def test_rendered_view_keeps_proposal_sections(self):
+        views = dict(render_views(GOOD.replace("Content.", "50 USD")))
+        self.assertEqual({rule for rule, _, _ in inspect_view(views["rendered:report.pdf"])}, {"currency-outside-offer"})
+        views = dict(render_views(GOOD.replace("Talk.", "50 USD")))
+        self.assertEqual({rule for rule, _, _ in inspect_view(views["rendered:report.pdf"])}, {"price-in-offer"})
+
+    def test_source_and_rendered_findings_are_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "report.md").write_text(GOOD.replace("Talk.", "50 USD"), encoding="utf-8")
+            _, result = self.run_lint(root)
+            self.assertEqual([(f["rule"], f["file"]) for f in result["findings"]], [("price-in-offer", "report.md")])
 
 
 if __name__ == "__main__":
