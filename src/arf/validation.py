@@ -183,6 +183,8 @@ def validate_policy(request: Request, phase: Phase, directory: Path) -> None:
         errors.append("ben_ok: required when allow_public_scan is true")
 
     if request.mode == "eval":
+        if request.allow_public_scan:
+            errors.append("allow_public_scan: public scans are not allowed in eval mode")
         if request.eval_case is None:
             errors.append("eval_case: required when mode is eval")
         if request.fixture_bundle is None:
