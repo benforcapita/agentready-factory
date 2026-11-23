@@ -3,21 +3,43 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from typing import Literal
 
 Language = Literal["he", "en"]
 
-_HTML_TAG = re.compile(r"<html\b[^>]*>", re.IGNORECASE)
-_LANG_ATTR = re.compile(r"""\s(?:xml:)?lang\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _TAG = re.compile(r"[A-Za-z]{1,8}(?:[-_][A-Za-z0-9]{1,8})*")
 _SUPPORTED = {"he": "he", "iw": "he", "en": "en"}
 
 
+class _Found(Exception):
+    pass
+
+
+class _HtmlTagParser(HTMLParser):
+    """Stops at the first real `<html>` start tag (comments, scripts and quoted `>` are skipped)."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.lang = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "html":
+            self.lang = next((value or "" for name, value in attrs if name in ("lang", "xml:lang")), "")
+            raise _Found
+
+    handle_startendtag = handle_starttag
+
+
 def html_lang(html: str | None) -> str | None:
     """The `lang` attribute of the document's `<html>` tag, if it holds a language tag."""
-    tag = _HTML_TAG.search(html or "")
-    match = _LANG_ATTR.search(tag.group(0)) if tag else None
-    value = next((group for group in match.groups() if group is not None), "").strip() if match else ""
+    parser = _HtmlTagParser()
+    try:
+        parser.feed(html or "")
+        parser.close()
+    except _Found:
+        pass
+    value = parser.lang.strip()
     return value if _TAG.fullmatch(value) else None
 
 

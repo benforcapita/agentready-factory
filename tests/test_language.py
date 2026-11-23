@@ -41,6 +41,19 @@ class DetectTest(unittest.TestCase):
         self.assertEqual(html_lang('<html lang="iw">'), "iw")
         self.assertEqual(detect('<html lang="iw">', None, "example.com")[0], "he")
 
+    def test_commented_out_html_tag_is_ignored(self):
+        html = '<!--<html lang="he">--><html lang="en">'
+        self.assertEqual(detect(html, None, "example.com"), ("en", "html lang=en", "en"))
+        self.assertEqual(detect(html, None, "www.haaretz.co.il"), ("en", "html lang=en", "en"))
+
+    def test_commented_out_unsupported_lang_is_not_flagged(self):
+        html = '<!-- <html lang="ru"> --><html lang="en-US">'
+        self.assertEqual(detect(html, None, "www.9tv.co.il"), ("en", "html lang=en-US", "en-US"))
+
+    def test_gt_inside_earlier_attribute_value(self):
+        html = '<html data-x="a>b" lang="en-US">'
+        self.assertEqual(detect(html, None, "www.haaretz.co.il"), ("en", "html lang=en-US", "en-US"))
+
     def test_detect_declared_uses_extracted_value(self):
         self.assertEqual(detect_declared("en-US", None, "www.timesofisrael.com"), ("en", "html lang=en-US", "en-US"))
         self.assertEqual(detect_declared(None, None, "www.elal.co.il")[0], "he")
