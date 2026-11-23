@@ -9,12 +9,16 @@ permissions:
 jobs:
   lint-mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - name: Show checked-out revision
+        run: |
+          echo "checked out (merge ref): $(git rev-parse HEAD)"
+          echo "pull request head: ${{ github.event.pull_request.head.sha }}"
+          echo "base: ${{ github.event.pull_request.base.sha }}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -26,13 +30,24 @@ jobs:
       - name: Check mutations offline
         shell: bash
         run: |
+          report="$RUNNER_TEMP/lint-mutation.json"
+          set +e
           sudo unshare --net --setgid "$(id -g)" --setuid "$(id -u)" -- \
-            "$(command -v python)" tools/lint-mutation/run.py --seed 567 --budget-seconds 90 \
-            | tee "$RUNNER_TEMP/lint-mutation.json"
+            "$(command -v python)" tools/lint-mutation/run.py --seed 567 --budget-seconds 150 > "$report"
+          status=$?
+          set -e
+          cat "$report"
+          if ! python -c 'import json, sys; json.load(open(sys.argv[1]))' "$report" 2>/dev/null; then
+            printf '{"crash": "run.py exited %s without a JSON report", "exit_code": %s, "errors": ["crash"]}\n' \
+              "$status" "$status" > "$report"
+            echo "::error::lint-mutation produced no valid report (exit $status); uploaded a crash stub"
+            [ "$status" -ne 0 ] || status=1
+          fi
+          exit "$status"
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lint-mutation
           path: ${{ runner.temp }}/lint-mutation.json
-          if-no-files-found: ignore
+          if-no-files-found: error
