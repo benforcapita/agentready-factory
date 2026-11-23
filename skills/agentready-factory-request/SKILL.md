@@ -15,12 +15,21 @@ description: File one valid AgentReady report draft request for a named site or 
    `reply_ticket` to its URL. Keep `allow_public_scan: false` unless Ben gave
    explicit approval for this run; in that case quote the timestamped approval
    in `ben_ok`.
-3. Run `arf validate request.yaml --phase <current-phase>` locally. Then file
-   it in **one** Linear issue creation: title `AgentReady draft: <domain>`,
-   description one fenced YAML block containing the valid request, and only
-   the `bot:agentready-factory` route label. Do not assign, delegate, or tag
-   anyone. If the route isn't configured, return the validated YAML instead
-   of filing. Replay requests stay local; do not file them via this route.
+3. Run `arf validate request.yaml --phase <current-phase>` locally. If the
+   route is configured, file the request with **one** Linear issue creation:
+
+   - **Team:** Products-ben (`PRO`).
+   - **State:** `Todo`.
+   - **Title:** `AgentReady report: <domain>` (use the site's domain).
+   - **Label:** `bot:agentready-factory` only.
+   - **Description:** Copy the [example ticket body](request-ticket.md) as raw
+     Markdown and replace its YAML with your validated request. Keep exactly
+     one fenced block, opening with `` ```yaml arf-request `` and closing with
+     `` ``` ``. The factory bot reads only that block.
+
+   Do not assign, delegate, or mention anyone. If the route isn't configured,
+   return the validated YAML instead of filing. Replay requests stay local;
+   do not file them via this route.
 
 This asks for a draft for review, never delivery. Don't email, submit forms,
 contact the business, share artifacts or add tracking. Drafts must not quote

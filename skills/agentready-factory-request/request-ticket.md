@@ -1,0 +1,10 @@
+```yaml arf-request
+version: 1
+trigger: named_site
+site: https://example.com
+business_name: Example Bakery
+language: auto
+mode: shadow
+allow_public_scan: false
+requested_by: chief-of-staff
+```

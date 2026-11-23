@@ -117,6 +117,42 @@ class EvalModeTests(unittest.TestCase):
         writer.assert_called_once()
 
 
+    def test_configured_hook_rejects_eval_request_without_fields(self):
+        with self.assertRaisesRegex(ValueError, "eval mode requires"):
+            self.factory.submit(request(trigger="named_site", musy=None, mode="eval"))
+        self.assertEqual(self.store.log, [])
+        self.assertEqual((self.normal_steps.mock_calls, self.replay_steps.calls, self.db.results), ([], [], []))
+
+    def test_hook_with_empty_eval_run_is_rejected(self):
+        factory = Orchestrator(
+            self.store, self.normal_steps, eval_mode=EvalMode("", self.replay_steps, self.db.record_result),
+        )
+        with self.assertRaisesRegex(ValueError, "eval mode requires"):
+            factory.submit(self.request)
+        self.assertEqual(self.store.log, [])
+
+    def test_execute_rejects_a_different_eval_run(self):
+        submission = self.factory.submit(self.request)
+        log = list(self.store.log)
+        other = Orchestrator(
+            self.store, self.normal_steps,
+            eval_mode=EvalMode(EVAL_RUN + "-other", self.replay_steps, self.db.record_result),
+        )
+        with self.assertRaisesRegex(ValueError, "linked Eval Run"):
+            other.execute(submission.task.id)
+        self.assertEqual(self.store.log, log)
+        self.assertEqual((self.normal_steps.mock_calls, self.replay_steps.calls, self.db.results), ([], [], []))
+
+    def test_orchestrator_rejects_eval_public_scan_even_with_approval(self):
+        scan = self.request.model_copy(update={
+            "allow_public_scan": True, "ben_ok": "Ben approved at 2026-11-23T10:00:00+02:00",
+        })
+        with self.assertRaisesRegex(ValueError, "public scans are not allowed in eval mode"):
+            self.factory.submit(scan)
+        self.assertEqual(self.store.log, [])
+        self.assertEqual(self.normal_steps.mock_calls, [])
+
+
 class RequesterAndDryRunTests(unittest.TestCase):
     def test_arf_validate_accepts_requester_template(self):
         with patch("socket.getaddrinfo", return_value=[
