@@ -1,6 +1,7 @@
 import contextlib
 from datetime import datetime, timedelta, timezone
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -417,11 +418,12 @@ class ReplayTests(unittest.TestCase):
 class RuntimeFakeIPPolicyTests(unittest.TestCase):
     def run_collecting(self, environ):
         collector = Mock(return_value={"requests_made": 0})
+        reader = Mock(return_value={"paths": ["/"]})
         with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", environ, clear=True):
             steps = FakeSteps()
             store = MemoryStore()
             orchestrator = Orchestrator(store, CollectingSteps(steps, lambda context: Path(directory) / context.run.id,
-                                                               collector=collector), clock=lambda: NOW)
+                                                               collector=collector, reader=reader), clock=lambda: NOW)
             submission = orchestrator.submit(request())
             with self.assertLogs("arf.orchestrator", "INFO") as logs:
                 task = orchestrator.execute(submission.task.id)
@@ -452,10 +454,42 @@ class RuntimeFakeIPPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = MemoryStore()
             orchestrator = Orchestrator(store, CollectingSteps(FakeSteps(), lambda context: Path(directory),
-                                                               collector=collector), clock=lambda: NOW)
+                                                               collector=collector, reader=Mock()), clock=lambda: NOW)
             task = orchestrator.execute(orchestrator.submit(request()).task.id)
         self.assertEqual(task.status, "Failed")
         self.assertIn("errors.json", store.runs[task.latest_run].error)
+
+
+class ReaderWiringTests(unittest.TestCase):
+    def test_article_paths_reach_read_site(self):
+        def collector(site, out, **_):
+            out.mkdir(parents=True)
+            (out / "articles.json").write_text(
+                json.dumps({"articles": [{"path": "/a"}, {"path": "/b"}],
+                            "paths": ["/a", "/b"], "reason": None}) + "\n", encoding="utf-8")
+            return {"requests_made": 0}
+
+        reader = Mock(return_value={"jina": [], "tinyfish": {}})
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore()
+            orchestrator = Orchestrator(store, CollectingSteps(FakeSteps(), lambda context: Path(directory),
+                                                               collector=collector, reader=reader), clock=lambda: NOW)
+            task = orchestrator.execute(orchestrator.submit(request()).task.id)
+            self.assertEqual(task.status, "Needs review")
+            reader.assert_called_once_with(
+                request().site, ["/", "/a", "/b"], Path(directory) / "evidence" / "readers",
+                jina_key=None, tinyfish_key=None)
+
+    def test_no_articles_reads_home_only(self):
+        reader = Mock(return_value={})
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore()
+            orchestrator = Orchestrator(store, CollectingSteps(
+                FakeSteps(), lambda context: Path(directory),
+                collector=Mock(return_value={}), reader=reader), clock=lambda: NOW)
+            task = orchestrator.execute(orchestrator.submit(request()).task.id)
+            self.assertEqual(task.status, "Needs review")
+            self.assertEqual(reader.call_args.args[1], ["/"])
 
 
 if __name__ == "__main__":

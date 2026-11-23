@@ -74,7 +74,7 @@ def server():
             page = self.server.pages.get((host, self.path))
             if page:
                 body = page
-            self.send_response(301 if redirect else 200)
+            self.send_response(404 if (host, self.path) in self.server.missing else 301 if redirect else 200)
             if redirect:
                 self.send_header("Location", redirect)
             if page and self.server.content_language:
@@ -103,6 +103,7 @@ def server():
     instance.redirect = None
     instance.redirects = {}
     instance.pages = {}
+    instance.missing = set()
     instance.content_language = None
     instance.trickle = 0
     thread = Thread(target=instance.serve_forever, daemon=True)

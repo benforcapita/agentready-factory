@@ -369,6 +369,83 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(manifest["requests_made"], config.MAX_REQUESTS)
         with (self.out / "advertised.csv").open() as stream:
             self.assertEqual({row["status"] for row in csv.DictReader(stream)}, {"skipped_budget"})
+        articles = json.loads((self.out / "articles.json").read_text())
+        self.assertEqual((articles["articles"], articles["paths"]), ([], []))
+
+    @staticmethod
+    def urlset(urls):
+        items = "".join(f"<url><loc>{loc}</loc><lastmod>{mod}</lastmod></url>" for loc, mod in urls)
+        return ('<?xml version="1.0"?>'
+                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                f"{items}</urlset>").encode()
+
+    def test_articles_two_newest_from_sitemap(self):
+        port = self.instance.server_port
+        urls = [(f"http://www.shop.example:{port}/news/{i}", f"2026-01-0{i}") for i in range(1, 6)]
+        self.instance.pages = {("www.shop.example", "/sitemap.xml"): self.urlset(urls)}
+        self.instance.pages.update({("www.shop.example", f"/news/{i}"): f"article {i}\n".encode()
+                                    for i in range(1, 6)})
+        manifest = self.run_collect()
+        result = json.loads((self.out / "articles.json").read_text())
+        self.assertEqual(result["sitemap"], "urlset")
+        self.assertEqual(result["paths"], ["/news/5", "/news/4"])
+        self.assertEqual([(row["status"], row["size"]) for row in result["articles"]], [(200, 10), (200, 10)])
+        self.assertEqual(manifest["articles"]["paths"], ["/news/5", "/news/4"])
+        self.assertEqual(manifest["requests_made"], 83)
+        files = {entry["path"] for entry in manifest["files"]}
+        self.assertTrue({"articles.json", "articles/0-0.body", "articles/1-0.body"} <= files)
+        skipped = {row["reason"] for row in result["skipped"]}
+        self.assertEqual(skipped, {"over article cap"})
+
+    def test_articles_sitemap_index_fetches_first_child_once(self):
+        port = self.instance.server_port
+        index = ('<?xml version="1.0"?>'
+                 '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                 f"<sitemap><loc>http://www.shop.example:{port}/news-sitemap.xml</loc></sitemap>"
+                 f"<sitemap><loc>http://www.shop.example:{port}/other-sitemap.xml</loc></sitemap>"
+                 "</sitemapindex>").encode()
+        urls = [(f"http://www.shop.example:{port}/a", "2026-01-01"),
+                (f"http://www.shop.example:{port}/b", "2026-01-02")]
+        self.instance.pages = {
+            ("www.shop.example", "/sitemap.xml"): index,
+            ("www.shop.example", "/news-sitemap.xml"): self.urlset(urls),
+            ("www.shop.example", "/other-sitemap.xml"): self.urlset(
+                [(f"http://www.shop.example:{port}/c", "2026-01-03")]),
+            ("www.shop.example", "/a"): b"article a\n",
+            ("www.shop.example", "/b"): b"article b\n",
+        }
+        manifest = self.run_collect()
+        result = json.loads((self.out / "articles.json").read_text())
+        self.assertEqual(result["sitemap"], "urlset")
+        self.assertEqual(result["paths"], ["/b", "/a"])
+        self.assertEqual([row["status"] for row in result["articles"]], [200, 200])
+        self.assertNotIn("/other-sitemap.xml", self.instance.paths)
+        self.assertEqual(self.instance.paths.count("/news-sitemap.xml"), 1)
+        self.assertEqual(manifest["requests_made"], 84)
+
+    def test_articles_no_sitemap_records_reason(self):
+        self.instance.missing = {("shop.example", "/sitemap.xml"), ("www.shop.example", "/sitemap.xml"),
+                                 ("www.shop.example", "/sitemap_index.xml")}
+        manifest = self.run_collect()
+        result = json.loads((self.out / "articles.json").read_text())
+        self.assertEqual((result["articles"], result["paths"]), ([], []))
+        self.assertEqual(result["reason"], "no sitemap collected")
+        self.assertEqual(manifest["requests_made"], 81)
+
+    def test_articles_off_domain_urls_are_skipped(self):
+        port = self.instance.server_port
+        urls = [("http://other.example/news/x", "2026-01-05"),
+                ("https://www.shop.example/", "2026-01-04"),
+                (f"http://www.shop.example:{port}/news/a", "2026-01-03")]
+        self.instance.pages = {("www.shop.example", "/sitemap.xml"): self.urlset(urls),
+                               ("www.shop.example", "/news/a"): b"article a\n"}
+        manifest = self.run_collect()
+        result = json.loads((self.out / "articles.json").read_text())
+        self.assertEqual(result["paths"], ["/news/a"])
+        skipped = {row["url"]: row["reason"] for row in result["skipped"]}
+        self.assertEqual(skipped["http://other.example/news/x"], "off canonical domain")
+        self.assertEqual(skipped["https://www.shop.example/"], "root path")
+        self.assertNotIn("other.example", manifest["request_count"]["per_host"])
 
     def test_public_ip_literals_have_no_www_variant(self):
         for literal, host in (("93.184.216.34", "93.184.216.34"),

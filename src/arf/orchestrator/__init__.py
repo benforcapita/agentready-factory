@@ -265,22 +265,36 @@ class CollectingSteps:
     """
 
     def __init__(self, steps: Steps, directory: Callable[[RunContext], Any], *,
-                 collector: Callable[..., dict[str, Any]] | None = None) -> None:
+                 collector: Callable[..., dict[str, Any]] | None = None,
+                 reader: Callable[..., dict[str, Any]] | None = None) -> None:
         self.steps = steps
         self.directory = directory
         self.collector = collector
+        self.reader = reader
 
     def collect(self, context: RunContext) -> None:
         self.steps.collect(context)
         collector = self.collector
         if collector is None:
             from ..collect import collect as collector
+        reader = self.reader
+        if reader is None:
+            from ..readers import read_site as reader
         policy = runtime_fake_ip_policy()
         source = "ARF_FAKE_IP_POLICY" if "ARF_FAKE_IP_POLICY" in os.environ else "factory runtime default"
         log.info("collect %s: fake_ip_policy=%s (%s)", context.request.site, policy, source)
         context.state["fake_ip_policy"] = policy
-        context.state["evidence"] = collector(context.request.site, Path(self.directory(context)) / "evidence",
-                                              fake_ip_policy=policy)
+        evidence = Path(self.directory(context)) / "evidence"
+        context.state["evidence"] = collector(context.request.site, evidence, fake_ip_policy=policy)
+        paths = ["/"]
+        try:
+            paths += json.loads((evidence / "articles.json").read_text(encoding="utf-8"))["paths"]
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        context.state["reader_paths"] = paths
+        context.state["readers"] = reader(context.request.site, paths, evidence / "readers",
+                                          jina_key=os.environ.get("JINA_API_KEY"),
+                                          tinyfish_key=os.environ.get("TINYFISH_API_KEY"))
 
     def draft(self, context: RunContext, fix: list[dict[str, Any]] | None) -> None:
         self.steps.draft(context, fix)
