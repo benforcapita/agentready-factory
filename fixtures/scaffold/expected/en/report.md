@@ -2,7 +2,7 @@
 # AI Agent Readiness Report (AgentReady) — Example Bakery
 
 **Prepared for:** Example Bakery — Example Contact, Marketing
-**Prepared by:** Ben Blum — AI, agents and digital platforms consulting
+**Prepared by:** Ben Blum — automatic evaluation
 **Check date:** <!-- arf:slot check-date -->
 
 ---

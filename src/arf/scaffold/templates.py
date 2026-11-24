@@ -5,7 +5,7 @@ REPORT = {
 {draft}# דוח מוכנות לסוכני AI (AgentReady) — {business}
 
 **הוכן עבור:** {business}{contact_line}
-**הוכן על ידי:** בן בלום — ייעוץ AI, סוכנים ופלטפורמות דיגיטליות
+**הוכן על ידי:** Ben Blum — automatic evaluation
 **תאריך הבדיקה:** <!-- arf:slot check-date -->
 {meeting_line}
 ---
@@ -58,7 +58,7 @@ REPORT = {
 {draft}# AI Agent Readiness Report (AgentReady) — {business}
 
 **Prepared for:** {business}{contact_line}
-**Prepared by:** Ben Blum — AI, agents and digital platforms consulting
+**Prepared by:** Ben Blum — automatic evaluation
 **Check date:** <!-- arf:slot check-date -->
 {meeting_line}
 ---
