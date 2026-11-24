@@ -15,6 +15,7 @@ PATHS = ("/", "/robots.txt", "/llms.txt", "/sitemap.xml")
 DISCOVERY_PATHS = (
     "/.well-known/ai-catalog.json", "/llms-full.txt",
     "/.well-known/security.txt", "/sitemap_index.xml", "/.well-known/ai-plugin.json",
+    "/poppy.json", "/.well-known/poppy.json", "/.well-known/mcp.json",
 )
 TIMEOUT = 10
 MAX_REQUESTS = 100

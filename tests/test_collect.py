@@ -56,7 +56,7 @@ class CollectTests(unittest.TestCase):
             self.assertEqual({row["domain"] for row in csv.DictReader(stream)}, {"www.shop.example"})
         self.assertEqual(manifest["request_count"]["per_host"], dict(self.instance.hits))
         self.assertEqual(manifest["request_count"]["total"], sum(self.instance.hits.values()))
-        self.assertEqual(manifest["requests_made"], 78)
+        self.assertEqual(manifest["requests_made"], 81)
         self.assertEqual(manifest["max_requests"], 100)
         self.assertLessEqual(manifest["requests_made"], 100)
         for headers in self.instance.headers_seen:
@@ -85,7 +85,7 @@ class CollectTests(unittest.TestCase):
         self.assertEqual({row["status"] for row in rows[9:]}, {"skipped_budget"})
         with (self.out / "discovery.csv").open() as stream:
             rows = list(csv.DictReader(stream))
-        self.assertEqual(len(rows), 5)
+        self.assertEqual(len(rows), 8)
         self.assertEqual({row["status"] for row in rows}, {"skipped_budget"})
         self.assertEqual(json.loads((self.out / "errors.json").read_text()), [])
 
@@ -152,8 +152,8 @@ class CollectTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "errors.json"):
             self.run_collect(resolver=resolving)
         manifest = json.loads((self.out / "evidence.json").read_text())
-        self.assertEqual(manifest["requests_made"], 78)
-        self.assertEqual(sum(self.instance.hits.values()), 78)
+        self.assertEqual(manifest["requests_made"], 81)
+        self.assertEqual(sum(self.instance.hits.values()), 81)
         self.assertNotIn("private.example", manifest["request_count"]["per_host"])
 
     def test_6to4_is_denied_even_if_ipaddress_considers_it_global(self):
@@ -261,7 +261,7 @@ class CollectTests(unittest.TestCase):
                 before = sum(self.instance.hits.values())
                 with self.assertRaisesRegex(OSError, "errors.json"):
                     self.run_collect(resolver=resolving)
-                self.assertEqual(sum(self.instance.hits.values()) - before, 78)
+                self.assertEqual(sum(self.instance.hits.values()) - before, 81)
                 errors = json.loads((self.out / "errors.json").read_text())
                 self.assertEqual(len(errors), 1)
                 expected = "error" if destination == "http://[::1/" else "refused"
@@ -270,6 +270,105 @@ class CollectTests(unittest.TestCase):
                     rows = list(csv.DictReader(stream))
                 self.assertEqual(sum(row["status"] == expected for row in rows), 1)
                 self.assertEqual(rows[-1]["status"], "200")
+
+    def test_advertised_endpoints_fetched_deduped_and_capped(self):
+        port = self.instance.server_port
+        first = f"http://mcp.other-host.example:{port}/mcp"
+        second = f"http://api.other-host.example:{port}/openapi.json"
+        catalog = json.dumps({
+            "name": "shop",
+            "mcp_endpoint": first,
+            "api": {"openapi": second},
+            "servers": [{"url": f"http://third.example:{port}/sse"}],
+            "poppy": {"endpoint": first},
+            "docs": "https://unrelated.example/page",
+        }).encode()
+        self.instance.pages = {
+            ("www.shop.example", "/.well-known/ai-catalog.json"): catalog,
+            ("mcp.other-host.example", "/mcp"): b"mcp endpoint\n",
+            ("api.other-host.example", "/openapi.json"): b"openapi spec\n",
+        }
+        policy = GuardPolicy({**local_policy().allowed_networks,
+                              "mcp.other-host.example": ("127.0.0.1/32",),
+                              "api.other-host.example": ("127.0.0.1/32",)})
+        manifest = self.run_collect(policy=policy)
+        with (self.out / "advertised.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual([row["source_file"] for row in rows], ["/.well-known/ai-catalog.json"] * 3)
+        self.assertEqual([(row["url"], row["status"]) for row in rows],
+                         [(first, "200"), (second, "200"),
+                          (f"http://third.example:{port}/sse", "skipped_cap")])
+        self.assertEqual((self.out / rows[0]["body"]).read_bytes(), b"mcp endpoint\n")
+        self.assertEqual((self.out / rows[1]["body"]).read_bytes(), b"openapi spec\n")
+        fetched = manifest["advertised"]["fetched"]
+        self.assertEqual([row["url"] for row in fetched], [first, second])
+        self.assertEqual(json.loads((self.out / "errors.json").read_text()), [])
+        self.assertEqual(len(manifest["advertised"]["candidates"]), 3)
+        self.assertEqual(manifest["requests_made"], 83)
+        self.assertEqual(manifest["request_count"]["per_host"]["mcp.other-host.example"], 1)
+        self.assertNotIn("third.example", manifest["request_count"]["per_host"])
+        files = {entry["path"] for entry in manifest["files"]}
+        self.assertTrue({"advertised.csv", "advertised/0-0.body", "advertised/1-0.body"} <= files)
+
+    def test_advertised_url_resolving_private_is_refused(self):
+        catalog = json.dumps({"mcp": {"server": "http://internal.example/mcp"}}).encode()
+        self.instance.pages = {("www.shop.example", "/.well-known/mcp.json"): catalog}
+
+        def resolving(host, port, **kwargs):
+            if host == "internal.example":
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", port))]
+            return resolve(host, port, **kwargs)
+
+        with self.assertRaisesRegex(OSError, "errors.json"):
+            self.run_collect(resolver=resolving)
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        with (self.out / "advertised.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("internal.example", "refused")])
+        errors = json.loads((self.out / "errors.json").read_text())
+        self.assertEqual(errors[0]["status"], "refused")
+        self.assertNotIn("internal.example", manifest["request_count"]["per_host"])
+        self.assertEqual(manifest["requests_made"], 81)
+
+    def test_advertised_from_llms_txt_keyword_line(self):
+        port = self.instance.server_port
+        advertised_url = f"http://agents.other-host.example:{port}/mcp"
+        llms = ("# shop\n- [Docs](https://docs.shop.example/) for humans\n"
+                f"- MCP server: {advertised_url}\n").encode()
+        self.instance.pages = {("www.shop.example", "/llms.txt"): llms}
+        policy = GuardPolicy({**local_policy().allowed_networks,
+                              "agents.other-host.example": ("127.0.0.1/32",)})
+        manifest = self.run_collect(policy=policy)
+        with (self.out / "advertised.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual([(row["source_file"], row["host"], row["status"]) for row in rows],
+                         [("/llms.txt", "agents.other-host.example", "200")])
+        self.assertEqual(manifest["requests_made"], 82)
+
+    def test_advertised_redirects_are_followed_and_counted(self):
+        port = self.instance.server_port
+        catalog = json.dumps({"endpoint": f"http://www.shop.example:{port}/api"}).encode()
+        self.instance.pages = {("www.shop.example", "/.well-known/ai-catalog.json"): catalog}
+        self.instance.redirects = {("www.shop.example", "/api"): "/api/v2"}
+        manifest = self.run_collect()
+        with (self.out / "advertised.csv").open() as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual([row["status"] for row in rows], ["301", "200"])
+        self.assertTrue(rows[1]["url"].endswith("/api/v2"))
+        self.assertEqual(manifest["requests_made"], 83)
+
+    def test_advertised_worst_case_stays_within_budget(self):
+        port = self.instance.server_port
+        catalog = json.dumps({"mcp_endpoint": f"http://mcp.other-host.example:{port}/mcp"}).encode()
+        self.instance.pages = {("www.shop.example", "/.well-known/ai-catalog.json"): catalog}
+        self.instance.redirects = {("www.shop.example", path): path
+                                   for path in config.DISCOVERY_PATHS[1:]}
+        with self.assertRaisesRegex(OSError, "errors.json"):
+            self.run_collect()
+        manifest = json.loads((self.out / "evidence.json").read_text())
+        self.assertEqual(manifest["requests_made"], config.MAX_REQUESTS)
+        with (self.out / "advertised.csv").open() as stream:
+            self.assertEqual({row["status"] for row in csv.DictReader(stream)}, {"skipped_budget"})
 
     def test_public_ip_literals_have_no_www_variant(self):
         for literal, host in (("93.184.216.34", "93.184.216.34"),
@@ -281,7 +380,7 @@ class CollectTests(unittest.TestCase):
                                    port=self.instance.server_port,
                                    policy=GuardPolicy({host: ("127.0.0.1/32",)}))
                 self.assertEqual(manifest["hosts"], [host])
-                self.assertEqual(manifest["requests_made"], 42)
+                self.assertEqual(manifest["requests_made"], 45)
                 with (out / "probes.csv").open() as stream:
                     rows = list(csv.DictReader(stream))
                 self.assertEqual(len(rows), 36)
@@ -292,8 +391,8 @@ class CollectTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "errors.json"):
             self.run_collect()
         manifest = json.loads((self.out / "evidence.json").read_text())
-        self.assertEqual(manifest["request_count"]["total"], 81)
-        self.assertEqual(sum(self.instance.hits.values()), 81)
+        self.assertEqual(manifest["request_count"]["total"], 84)
+        self.assertEqual(sum(self.instance.hits.values()), 84)
 
     def test_landing_redirect_to_other_host_and_path(self):
         port = self.instance.server_port
@@ -322,7 +421,7 @@ class CollectTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual({row["domain"] for row in rows}, {"shop.example"})
         self.assertTrue(all(row["url"].startswith(f"http://shop.example:{port}/") for row in rows))
-        self.assertEqual(manifest["requests_made"], 2 + 72 + 9 + 5)
+        self.assertEqual(manifest["requests_made"], 2 + 72 + 9 + 8)
         files = {entry["path"]: entry for entry in manifest["files"]}
         for name in ("landing.html", "site.json"):
             data = (self.out / name).read_bytes()
@@ -360,7 +459,7 @@ class CollectTests(unittest.TestCase):
                 root = f"http://www.shop.example:{self.instance.server_port}/"
                 self.assertEqual((site["canonical_url"], site["final_status"]), (root, "refused"))
                 self.assertNotIn("private.example", manifest["request_count"]["per_host"])
-                self.assertEqual(manifest["requests_made"], 78)
+                self.assertEqual(manifest["requests_made"], 81)
                 with (self.out / "probes.csv").open() as stream:
                     self.assertNotIn("landing", {row["path"] for row in csv.DictReader(stream)})
 
@@ -373,7 +472,7 @@ class CollectTests(unittest.TestCase):
         manifest = json.loads((self.out / "evidence.json").read_text())
         self.assertEqual(len(manifest["landing"]["redirects"]), 4)
         self.assertTrue(manifest["landing"]["canonical_url"].endswith("/c"))
-        self.assertEqual(manifest["requests_made"], 4 + 72 + 9 + 4 + 4)
+        self.assertEqual(manifest["requests_made"], 4 + 72 + 9 + 4 + 7)
         self.assertLessEqual(manifest["requests_made"], config.MAX_REQUESTS)
         self.assertEqual(sum(self.instance.hits.values()), manifest["requests_made"])
 
@@ -400,7 +499,7 @@ class CollectTests(unittest.TestCase):
                 site_port = self.instance.server_port if override is None else 1
                 manifest = collect(f"https://shop.example:{site_port}", Path(directory) / "bundle",
                                    resolver=resolve, scheme="http", port=override, policy=local_policy())
-                self.assertEqual(manifest["request_count"]["total"], 78)
+                self.assertEqual(manifest["request_count"]["total"], 81)
                 with (Path(directory) / "bundle" / "discovery.csv").open() as stream:
                     self.assertTrue(all(f":{self.instance.server_port}/" in row["url"]
                                         for row in csv.DictReader(stream)))
@@ -508,10 +607,10 @@ class CollectTests(unittest.TestCase):
         with patch("arf.collect.transport.socket.socket", ProxySocket):
             manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(),
                                         fake_ip_policy="doh_verify", doh_resolver=doh)
-        self.assertEqual(len(connects), 78)
+        self.assertEqual(len(connects), 81)
         self.assertTrue(all(address[0] == "198.18.0.1" for address in connects))
-        self.assertEqual(sum(self.instance.hits.values()), 78)
-        self.assertEqual(doh.call_count, 78)
+        self.assertEqual(sum(self.instance.hits.values()), 81)
+        self.assertEqual(doh.call_count, 81)
         self.assertEqual(manifest["fake_ip_policy"], "doh_verify")
         expected = {host: sorted(doh.return_value) for host in ("shop.example", "www.shop.example")}
         self.assertEqual(manifest["doh_answers"], expected)
@@ -544,7 +643,7 @@ class CollectTests(unittest.TestCase):
                 self.assertTrue(all(call.args[0] == "redirect.example" for call in doh.call_args_list))
                 manifest = json.loads((self.out / "evidence.json").read_text())
                 self.assertEqual(manifest["doh_answers"], {"redirect.example": [answer]})
-                self.assertEqual(manifest["requests_made"], 78 if answer == "10.0.0.1" else 79)
+                self.assertEqual(manifest["requests_made"], 81 if answer == "10.0.0.1" else 82)
 
 
     def test_bare_collect_refuses_fake_ip_with_runtime_hint(self):
@@ -588,10 +687,10 @@ class CollectTests(unittest.TestCase):
                 patch("arf.collect.doh.http.client.HTTPSConnection") as https:
             https.return_value.getresponse.side_effect = getresponse
             manifest = self.run_collect(resolver=fake_resolve, policy=GuardPolicy(), fake_ip_policy="doh_verify")
-        self.assertEqual(len(calls), 2 * 78 + 1)
-        self.assertEqual(manifest["requests_made"], 78)
-        self.assertEqual(manifest["request_count"]["per_host"], {"shop.example": 36, "www.shop.example": 42})
-        self.assertEqual(sum(self.instance.hits.values()), 78)
+        self.assertEqual(len(calls), 2 * 81 + 1)
+        self.assertEqual(manifest["requests_made"], 81)
+        self.assertEqual(manifest["request_count"]["per_host"], {"shop.example": 36, "www.shop.example": 45})
+        self.assertEqual(sum(self.instance.hits.values()), 81)
         self.assertEqual(manifest["doh_answers"]["shop.example"], ["2606:4700:4700::1111", "93.184.216.34"])
 
 
