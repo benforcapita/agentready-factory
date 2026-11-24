@@ -15,7 +15,7 @@ from time import monotonic
 from urllib.parse import urljoin, urlunsplit
 from zoneinfo import ZoneInfo
 
-from . import advertised, config
+from . import advertised, articles, config
 from .doh import resolve_doh
 from .transport import BudgetExhausted, GuardPolicy, PinnedHTTPConnection, PinnedHTTPSConnection, Refused, target
 from ..language import html_lang
@@ -204,6 +204,11 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
     if llms_txt is not None:
         advertised_sources["/llms.txt"] = llms_txt
     advertised_result = advertised.fetch(out, request, errors, advertised_sources)
+    articles_result = articles.fetch(
+        out, request, errors,
+        [probe_bodies.get((name, "/sitemap.xml")) for name in [canonical_host, *hosts]]
+        + [discovery_bodies.get("/sitemap_index.xml")],
+        apex)
 
     (out / "errors.json").write_text(json.dumps(errors, indent=2) + "\n", encoding="utf-8")
     files = []
@@ -220,7 +225,7 @@ def collect(site, out, *, resolver=socket.getaddrinfo, scheme="https", port=None
         "request_count": {"total": sum(counts.values()), "per_host": dict(counts),
                           "requests_made": sum(counts.values()), "max_requests": max_requests},
         "fake_ip_policy": fake_ip_policy, "doh_answers": doh_answers, "landing": landing,
-        "advertised": advertised_result,
+        "advertised": advertised_result, "articles": articles_result,
         "config": {"identities": dict(config.IDENTITIES), "paths": config.PATHS,
                    "discovery_paths": config.DISCOVERY_PATHS, "timeout": config.TIMEOUT,
                    "max_requests": max_requests, "fake_ip_policy": fake_ip_policy,
